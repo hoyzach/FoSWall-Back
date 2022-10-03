@@ -39,6 +39,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
     _resetTokenRoyalty(tokenId);
   }
 
+  //generate svg creation for storing dynamic token images on-chain
   function generateImage(uint256 tokenId) internal view returns(string memory){
     bytes memory svg = abi.encodePacked(
         '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350">',
@@ -98,11 +99,12 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
         )
     );
   }
-  
+
   function mint(string memory expression) public {
     _tokenIds.increment();
     uint256 newItemId = _tokenIds.current();
     _safeMint(msg.sender, newItemId);
+    tokenIdDetails[newItemId].expression = expression;
     tokenIdDetails[newItemId].likes = 0;
     tokenIdDetails[newItemId].dislikes = 0;
     _setTokenURI(newItemId, getTokenURI(newItemId));
