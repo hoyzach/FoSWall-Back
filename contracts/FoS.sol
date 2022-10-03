@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
-contract FoS is ERC721URIStorage, ERC2981, Pausable, Ownable{
+contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
   using Counters for Counters.Counter;
   using Strings for uint256;
   Counters.Counter private _tokenIds;
@@ -17,12 +17,13 @@ contract FoS is ERC721URIStorage, ERC2981, Pausable, Ownable{
   //mapping(uint256 => uint256) public tokenIdLikes;
   //mapping(uint256 => uint256) public tokenIdDislikes;
 
-  struct Reactions {
+  struct Details {
+    string expression;
     uint128 likes;
     uint128 dislikes;
   }
 
-  mapping(uint256 => Reactions) public tokenIdReactions;
+  mapping(uint256 => Details) public tokenIdDetails;
   
   constructor() ERC721("Freedom of Speech", "FoS"){
     _setDefaultRoyalty(msg.sender, 500);
@@ -43,7 +44,7 @@ contract FoS is ERC721URIStorage, ERC2981, Pausable, Ownable{
         '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350">',
         '<style>.base { fill: white; font-family: serif; font-size: 14px; }</style>',
         '<rect width="100%" height="100%" fill="black" />',
-        '<text x="50%" y="40%" class="base" dominant-baseline="middle" text-anchor="middle">',"Warrior",'</text>',
+        '<text x="50%" y="40%" class="base" dominant-baseline="middle" text-anchor="middle">',getExpression(tokenId),'</text>',
         '<text x="50%" y="50%" class="base" dominant-baseline="middle" text-anchor="middle">', "Likes: ",getLikes(tokenId),'</text>',
         '</svg>'
     );
@@ -55,15 +56,37 @@ contract FoS is ERC721URIStorage, ERC2981, Pausable, Ownable{
     );
   }
 
+  function addLike(uint256 tokenId) public {
+    require(_exists(tokenId), "Please react to an existing token");
+    tokenIdDetails[tokenId].likes += 1;
+    _setTokenURI(tokenId, getTokenURI(tokenId));
+  }
+
+  function addDislike(uint256 tokenId) public {
+    require(_exists(tokenId), "Please react to an existing token");
+    tokenIdDetails[tokenId].dislikes += 1;
+    _setTokenURI(tokenId, getTokenURI(tokenId));
+  }
+
   function getLikes(uint256 tokenId) public view returns (string memory) {
-    uint256 likes = tokenIdReactions[tokenId].likes;
+    uint256 likes = tokenIdDetails[tokenId].likes;
     return likes.toString();
+  }
+  
+  function getDislikes(uint256 tokenId) public view returns (string memory) {
+    uint256 dislikes = tokenIdDetails[tokenId].dislikes;
+    return dislikes.toString();
+  }
+
+  function getExpression(uint256 tokenId) public view returns (string memory){
+    string memory expression = tokenIdDetails[tokenId].expression;
+    return expression;
   }
 
   function getTokenURI(uint256 tokenId) internal view returns (string memory){
     bytes memory dataURI = abi.encodePacked(
         '{',
-            '"name": "FAFS #', tokenId.toString(), '",',
+            '"name": "FoS #', tokenId.toString(), '",',
             '"description": "', getExpression(tokenId), '"',
             '"image": "', generateImage(tokenId), '"',
         '}'
@@ -75,19 +98,14 @@ contract FoS is ERC721URIStorage, ERC2981, Pausable, Ownable{
         )
     );
   }
-
-  function getExpression(uint256 tokenId) internal view returns (string memory){
-
-  }
-
-  function mintNFT(address recipient, string memory tokenURI) public onlyOwner returns (uint256) {
+  
+  function mint(string memory expression) public {
     _tokenIds.increment();
-
     uint256 newItemId = _tokenIds.current();
-    _safeMint(recipient, newItemId);
-    _setTokenURI(newItemId, tokenURI);
-
-    return newItemId;
+    _safeMint(msg.sender, newItemId);
+    tokenIdDetails[newItemId].likes = 0;
+    tokenIdDetails[newItemId].dislikes = 0;
+    _setTokenURI(newItemId, getTokenURI(newItemId));
   }
 
   function pause() public onlyOwner {
