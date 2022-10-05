@@ -12,6 +12,7 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
   using Counters for Counters.Counter;
   using Strings for uint256;
+  using Strings for uint64;
   Counters.Counter private _tokenIds;
 
   event ReceivedMATIC(uint256 amount);
@@ -23,6 +24,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
     string expression;
     uint128 likes;
     uint128 dislikes;
+    uint64 creationTime; //uint48 more efficient
   }
 
   mapping(uint256 => Details) public tokenIdToDetails;
@@ -49,6 +51,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
         '<rect width="100%" height="100%" fill="black" />',
         '<text x="50%" y="40%" class="base" dominant-baseline="middle" text-anchor="middle">',getExpression(tokenId),'</text>',
         '<text x="50%" y="50%" class="base" dominant-baseline="middle" text-anchor="middle">', "Likes: ",getLikes(tokenId),'</text>',
+        '<text x="50%" y="50%" class="base" dominant-baseline="middle" text-anchor="middle">',getCreationDate(tokenId),'</text>',
         '</svg>'
     );
     return string(
@@ -62,23 +65,25 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
   function addLike(uint256 tokenId) public payable {
     require(_exists(tokenId), "Please react to an existing token");
     require(msg.value == 1e17, "Sorry, it costs 0.1 matic to like!");
-    uint amount = msg.value;
+
     tokenIdToDetails[tokenId].likes += 1;
     _setTokenURI(tokenId, getTokenURI(tokenId));
-    sendViaCall(payable(ownerOf(tokenId)),amount);
-  }
 
-  function addDislike(uint256 tokenId) public {
-    require(_exists(tokenId), "Please react to an existing token");
-    tokenIdToDetails[tokenId].dislikes += 1;
-    _setTokenURI(tokenId, getTokenURI(tokenId));
+    address to = ownerOf(tokenId);
+    (bool sent, bytes memory data) = to.call{value: msg.value}("");
+    require(sent, "Failed to send Ether");
   }
 
   function getLikes(uint256 tokenId) public view returns (string memory) {
     uint256 likes = tokenIdToDetails[tokenId].likes;
     return likes.toString();
   }
-  
+
+  function addDislike(uint256 tokenId) public {
+    require(_exists(tokenId), "Please react to an existing token");
+    tokenIdToDetails[tokenId].dislikes += 1;
+  }
+
   function getDislikes(uint256 tokenId) public view returns (string memory) {
     uint256 dislikes = tokenIdToDetails[tokenId].dislikes;
     return dislikes.toString();
@@ -87,6 +92,11 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
   function getExpression(uint256 tokenId) public view returns (string memory){
     string memory expression = tokenIdToDetails[tokenId].expression;
     return expression;
+  }
+
+  function getCreationDate(uint256 tokenId) public view returns (string memory){
+    uint64 date = tokenIdToDetails[tokenId].creationTime;
+    return date.toString();
   }
 
   function getTokenURI(uint256 tokenId) internal view returns (string memory){
@@ -111,16 +121,12 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
     uint256 newItemId = _tokenIds.current();
     _safeMint(msg.sender, newItemId);
     tokenIdToDetails[newItemId].expression = expression;
+    tokenIdToDetails[newItemId].creationTime = uint64(block.timestamp);
     tokenIdToDetails[newItemId].likes = 0;
     tokenIdToDetails[newItemId].dislikes = 0;
     _setTokenURI(newItemId, getTokenURI(newItemId));
   }
 
-  function sendViaCall(address payable _to, uint256 amount) internal {
-    // Call returns a boolean value indicating success or failure.
-    (bool sent, bytes memory data) = _to.call{value: amount}("");
-    require(sent, "Failed to send Ether");
-    }
   //not yet implemented
   function pause() public onlyOwner {
     _pause();
@@ -142,7 +148,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
       fundme();
   }
 
-  //ensure MATIC cannot be trapped within the contract
+  //ensure MATIC cannot be trapped within the contract leaving enough gas for profit routing
   function withdraw(uint256 amount) external onlyOwner {
     require(address(this).balance > amount + 1e18, "Not enough funds in contract");
     payable(msg.sender).transfer(amount);
