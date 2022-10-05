@@ -28,6 +28,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
   }
 
   mapping(uint256 => Details) public tokenIdToDetails;
+  //mapping(address => mapping(uint256 => bool)) reactOnce;
   
   constructor() ERC721("Freedom of Speech", "FoS"){
     _setDefaultRoyalty(msg.sender, 500);
@@ -51,7 +52,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
         '<rect width="100%" height="100%" fill="black" />',
         '<text x="50%" y="40%" class="base" dominant-baseline="middle" text-anchor="middle">',getExpression(tokenId),'</text>',
         '<text x="50%" y="50%" class="base" dominant-baseline="middle" text-anchor="middle">', "Likes: ",getLikes(tokenId),'</text>',
-        '<text x="50%" y="50%" class="base" dominant-baseline="middle" text-anchor="middle">',getCreationDate(tokenId),'</text>',
+        '<text x="50%" y="60%" class="base" dominant-baseline="middle" text-anchor="middle">',getCreationDate(tokenId),'</text>',
         '</svg>'
     );
     return string(
@@ -103,8 +104,8 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
     bytes memory dataURI = abi.encodePacked(
         '{',
             '"name": "FoS #', tokenId.toString(), '",',
-            '"description": "', getExpression(tokenId), '"',
-            '"image": "', generateImage(tokenId), '"',
+            '"description": "', getExpression(tokenId), '",',
+            '"image_data": "', generateImage(tokenId), '"',
         '}'
     );
     return string(
@@ -150,7 +151,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
 
   //ensure MATIC cannot be trapped within the contract leaving enough gas for profit routing
   function withdraw(uint256 amount) external onlyOwner {
-    require(address(this).balance > amount + 1e18, "Not enough funds in contract");
+    require(address(this).balance >= amount, "Not enough funds in contract");
     payable(msg.sender).transfer(amount);
   }
 
