@@ -14,6 +14,8 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
   using Strings for uint256;
   Counters.Counter private _tokenIds;
 
+  event ReceivedMATIC(uint256 amount);
+
   //mapping(uint256 => uint256) public tokenIdLikes;
   //mapping(uint256 => uint256) public tokenIdDislikes;
 
@@ -23,7 +25,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
     uint128 dislikes;
   }
 
-  mapping(uint256 => Details) public tokenIdDetails;
+  mapping(uint256 => Details) public tokenIdToDetails;
   
   constructor() ERC721("Freedom of Speech", "FoS"){
     _setDefaultRoyalty(msg.sender, 500);
@@ -57,30 +59,33 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
     );
   }
 
-  function addLike(uint256 tokenId) public {
+  function addLike(uint256 tokenId) public payable {
     require(_exists(tokenId), "Please react to an existing token");
-    tokenIdDetails[tokenId].likes += 1;
+    require(msg.value == 1e17, "Sorry, it costs 0.1 matic to like!");
+    uint amount = msg.value;
+    tokenIdToDetails[tokenId].likes += 1;
     _setTokenURI(tokenId, getTokenURI(tokenId));
+    sendViaCall(payable(ownerOf(tokenId)),amount);
   }
 
   function addDislike(uint256 tokenId) public {
     require(_exists(tokenId), "Please react to an existing token");
-    tokenIdDetails[tokenId].dislikes += 1;
+    tokenIdToDetails[tokenId].dislikes += 1;
     _setTokenURI(tokenId, getTokenURI(tokenId));
   }
 
   function getLikes(uint256 tokenId) public view returns (string memory) {
-    uint256 likes = tokenIdDetails[tokenId].likes;
+    uint256 likes = tokenIdToDetails[tokenId].likes;
     return likes.toString();
   }
   
   function getDislikes(uint256 tokenId) public view returns (string memory) {
-    uint256 dislikes = tokenIdDetails[tokenId].dislikes;
+    uint256 dislikes = tokenIdToDetails[tokenId].dislikes;
     return dislikes.toString();
   }
 
   function getExpression(uint256 tokenId) public view returns (string memory){
-    string memory expression = tokenIdDetails[tokenId].expression;
+    string memory expression = tokenIdToDetails[tokenId].expression;
     return expression;
   }
 
@@ -100,23 +105,47 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Pausable, Ownable{
     );
   }
 
-  function mint(string memory expression) public {
+  function mint(string memory expression) public payable {
+    require(msg.value == 5e17, "Sorry, it costs 0.5 matic to post!");
     _tokenIds.increment();
     uint256 newItemId = _tokenIds.current();
     _safeMint(msg.sender, newItemId);
-    tokenIdDetails[newItemId].expression = expression;
-    tokenIdDetails[newItemId].likes = 0;
-    tokenIdDetails[newItemId].dislikes = 0;
+    tokenIdToDetails[newItemId].expression = expression;
+    tokenIdToDetails[newItemId].likes = 0;
+    tokenIdToDetails[newItemId].dislikes = 0;
     _setTokenURI(newItemId, getTokenURI(newItemId));
   }
 
+  function sendViaCall(address payable _to, uint256 amount) internal {
+    // Call returns a boolean value indicating success or failure.
+    (bool sent, bytes memory data) = _to.call{value: amount}("");
+    require(sent, "Failed to send Ether");
+    }
+  //not yet implemented
   function pause() public onlyOwner {
     _pause();
   }
-
+  //not yet implemented
   function unpause() public onlyOwner {
     _unpause();
   }
 
+  function fundme() public payable {
+      emit ReceivedMATIC(msg.value);
+  }
+
+  receive() external payable  { 
+      fundme();
+  }
+
+  fallback() external payable {
+      fundme();
+  }
+
+  //ensure MATIC cannot be trapped within the contract
+  function withdraw(uint256 amount) external onlyOwner {
+    require(address(this).balance > amount + 1e18, "Not enough funds in contract");
+    payable(msg.sender).transfer(amount);
+  }
 
 }
