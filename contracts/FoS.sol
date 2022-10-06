@@ -30,7 +30,8 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   //modifer to check if sender has already reacted to a tokenId
   modifier reactOnce(uint256 tokenId) {
     require(addressToToken[msg.sender][tokenId] == false, "Can only react to a token once");
-    addressToToken[msg.sender][tokenId] == true;
+    addressToToken[msg.sender][tokenId] = true;
+    _;
   }
 
   //ERC721URIStorage and ERC2981 both override supportsInterface - to fix this we override it as well
@@ -127,7 +128,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     tokenIdToDetails[newItemId].dislikes = 0;
     _setTokenURI(newItemId, getTokenURI(newItemId));
   }
-  
+
   //donation function
   function fundme() public payable {
       emit ReceivedMATIC(msg.value);
