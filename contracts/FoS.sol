@@ -21,8 +21,14 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     uint128 dislikes;
   }
 
+  //add resetTokenDetails on burn
+  //add FoS# name to image
+  //change string to bytes, require statement less than 192 bytes
+  //only 1 creation per address?
+  //burn when reaching a certain amount of dislikes (percentage) - distribute dislike fee to all token holders?
+
   mapping(uint256 => Details) public tokenIdToDetails;
-  mapping(address => mapping(uint256 => bool)) addressToToken;
+  mapping(address => mapping(uint256 => bool)) public addressToToken;
   
   constructor() ERC721("Freedom of Speech", "FoS"){
     _setDefaultRoyalty(msg.sender, 500);
@@ -39,6 +45,12 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     return super.supportsInterface(interfaceId);
   }
 
+  function resetTokenDetails(uint256 tokenId) internal {
+    tokenIdToDetails[tokenId].expression = " ";
+    tokenIdToDetails[tokenId].likes = 0;
+    tokenIdToDetails[tokenId].dislikes = 0;
+  }
+
   //burn override since inheriting ERC2981 instead of ERC721Royalty
   function _burn(uint256 tokenId) internal virtual override{
     super._burn(tokenId);
@@ -48,6 +60,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   //Allows owner of token to burn their token
   function burn(uint256 tokenId) public {
     require(msg.sender == ownerOf(tokenId), "Nice try, you cannot burn someone elses token!");
+    resetTokenDetails(tokenId);
     _burn(tokenId);
   }
 
@@ -143,9 +156,9 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   }
 
   //ensure MATIC cannot be trapped within the contract
-  function withdraw(uint256 amount) external onlyOwner {
-    require(address(this).balance >= amount, "Not enough funds in contract");
-    payable(msg.sender).transfer(amount);
+  function withdraw() external onlyOwner {
+    require(address(this).balance > 0, "No funds in contract");
+    payable(msg.sender).transfer(address(this).balance);
   }
 
 }
