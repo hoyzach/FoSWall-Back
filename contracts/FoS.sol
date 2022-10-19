@@ -21,12 +21,6 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     uint128 dislikes;
   }
 
-  //add resetTokenDetails on burn
-  //add FoS# name to image
-  //change string to bytes, require statement less than 192 bytes
-  //only 1 creation per address?
-  //burn when reaching a certain amount of dislikes (percentage) - distribute dislike fee to all token holders?
-
   mapping(uint256 => Details) public tokenIdToDetails;
   mapping(address => mapping(uint256 => bool)) public addressToToken;
   
@@ -55,12 +49,17 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   function _burn(uint256 tokenId) internal virtual override{
     super._burn(tokenId);
     _resetTokenRoyalty(tokenId);
+    resetTokenDetails(tokenId);
   }
 
   //Allows owner of token to burn their token
   function burn(uint256 tokenId) public {
     require(msg.sender == ownerOf(tokenId), "Nice try, you cannot burn someone elses token!");
-    resetTokenDetails(tokenId);
+    _burn(tokenId);
+  }
+
+  //Allows owner of contract to burn any token
+  function ownerBurn(uint256 tokenId) public onlyOwner {
     _burn(tokenId);
   }
 
@@ -69,11 +68,13 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     bytes memory svg = abi.encodePacked(
         '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350">',
         '<style>.base { fill: white; font-family: "Times New Roman", Times, serif; font-size: 12px; }</style>',
-        '<rect width="100%" height="100%" fill="black" />',
-        '<text x="50%" y="40%" class="base" dominant-baseline="middle" text-anchor="middle">',getExpression(tokenId),'</text>',
-        '<text x="50%" y="50%" class="base" dominant-baseline="middle" text-anchor="middle">', "Likes: ",getLikes(tokenId),'</text>',
+        '<rect width="100%" height="100%" fill="gainsboro" />',
+        '<text x="50%" y="30%" class="base" dominant-baseline="middle" text-anchor="middle">',"FoS #",tokenId,'</text>',
+        '<text x="50%" y="50%" class="base" dominant-baseline="middle" text-anchor="middle">',getExpression(tokenId),'</text>',
+        '<text x="50%" y="70%" class="base" dominant-baseline="middle" text-anchor="middle">', "Likes: ",getLikes(tokenId),'</text>',
         '</svg>'
     );
+    
     return string(
         abi.encodePacked(
             "data:image/svg+xml;base64,",
@@ -107,6 +108,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     uint256 dislikes = tokenIdToDetails[tokenId].dislikes;
     return dislikes.toString();
   }
+
   //Returns token expression as a string given tokenId
   function getExpression(uint256 tokenId) public view returns (string memory){
     string memory expression = tokenIdToDetails[tokenId].expression;
@@ -133,6 +135,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   //Given a string and 0.5 matic, creates new token and initializes reactions, generates URI
   function mint(string memory expression) public payable {
     require(msg.value == 5e17, "Sorry, it costs 0.5 matic to post!");
+    require(bytes(expression).length <= 64 , "The expression is too long");
     _tokenIds.increment();
     uint256 newItemId = _tokenIds.current();
     _safeMint(msg.sender, newItemId);
@@ -158,7 +161,11 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   //ensure MATIC cannot be trapped within the contract
   function withdraw() external onlyOwner {
     require(address(this).balance > 0, "No funds in contract");
-    payable(msg.sender).transfer(address(this).balance);
+    payable(owner()).transfer(address(this).balance);
+  }
+
+  function destroy() external onlyOwner {
+    selfdestruct(payable(owner()));
   }
 
 }
