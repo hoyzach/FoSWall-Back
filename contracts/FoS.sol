@@ -67,10 +67,10 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   function generateImage(uint256 tokenId) internal view returns(string memory){
     bytes memory svg = abi.encodePacked(
         '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350">',
-        '<style>.base { fill: white; font-family: "Times New Roman", Times, serif; font-size: 12px; }</style>',
-        '<rect width="100%" height="100%" fill="gainsboro" />',
-        '<text x="50%" y="30%" class="base" dominant-baseline="middle" text-anchor="middle">',"FoS #",tokenId,'</text>',
-        '<text x="50%" y="50%" class="base" dominant-baseline="middle" text-anchor="middle">',getExpression(tokenId),'</text>',
+        '<style>.base { fill: white; font-family: serif; font-size: 10px; } .exp{ fill: darkturquoise; font-family: serif; font-size: 12px; }</style>',
+        '<rect width="100%" height="100%" fill="black" />',
+        '<text x="50%" y="30%" class="base" dominant-baseline="middle" text-anchor="middle">', "FoS #",tokenId.toString(),'</text>',
+        '<text x="50%" y="50%" class="exp" dominant-baseline="middle" text-anchor="middle">',getExpression(tokenId),'</text>',
         '<text x="50%" y="70%" class="base" dominant-baseline="middle" text-anchor="middle">', "Likes: ",getLikes(tokenId),'</text>',
         '</svg>'
     );
