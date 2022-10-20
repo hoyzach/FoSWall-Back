@@ -1,3 +1,6 @@
+yarn-error.log
+yark.lock
+
 node_modules/
 .env
 notes.txt
@@ -5,8 +8,6 @@ coverage
 coverage.json
 typechain
 typechain-types
-yarn-error.log
-yark.lock
 
 #Hardhat files
 cache

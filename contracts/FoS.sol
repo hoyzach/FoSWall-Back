@@ -13,24 +13,24 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   using Strings for uint256;
   Counters.Counter private _tokenIds;
 
-  event ReceivedMATIC(uint256 amount);
+  event ReceivedMATIC(address sender, uint256 amount);
 
   struct Details {
     string expression;
-    uint128 likes;
-    uint128 dislikes;
+    uint256 likes;
+    uint256 dislikes;
   }
 
   mapping(uint256 => Details) public tokenIdToDetails;
-  mapping(address => mapping(uint256 => bool)) public addressToToken;
+  mapping(address => mapping(uint256 => bool)) public addressToReactionBool;
   
   constructor() ERC721("Freedom of Speech", "FoS"){
     _setDefaultRoyalty(msg.sender, 500);
   }
   //modifer to check if sender has already reacted to a tokenId
   modifier reactOnce(uint256 tokenId) {
-    require(addressToToken[msg.sender][tokenId] == false, "Can only react to a token once");
-    addressToToken[msg.sender][tokenId] = true;
+    require(addressToReactionBool[msg.sender][tokenId] == false, "Can only react to a token once");
+    addressToReactionBool[msg.sender][tokenId] = true;
     _;
   }
 
@@ -50,6 +50,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     super._burn(tokenId);
     _resetTokenRoyalty(tokenId);
     resetTokenDetails(tokenId);
+    _setTokenURI(tokenId, getTokenURI(tokenId));
   }
 
   //Allows owner of token to burn their token
@@ -67,7 +68,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   function generateImage(uint256 tokenId) internal view returns(string memory){
     bytes memory svg = abi.encodePacked(
         '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350">',
-        '<style>.base { fill: white; font-family: serif; font-size: 10px; } .exp{ fill: darkturquoise; font-family: serif; font-size: 12px; }</style>',
+        '<style>.base { fill: white; font-family: serif; font-size: 16px; font-weight: bold; } .exp{ fill: darkturquoise; font-family: serif; font-size: 12px; font-weight: bold;}</style>',
         '<rect width="100%" height="100%" fill="black" />',
         '<text x="50%" y="30%" class="base" dominant-baseline="middle" text-anchor="middle">', "FoS #",tokenId.toString(),'</text>',
         '<text x="50%" y="50%" class="exp" dominant-baseline="middle" text-anchor="middle">',getExpression(tokenId),'</text>',
@@ -147,7 +148,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
 
   //donation function
   function fundme() public payable {
-      emit ReceivedMATIC(msg.value);
+      emit ReceivedMATIC(msg.sender, msg.value);
   }
 
   receive() external payable  { 
