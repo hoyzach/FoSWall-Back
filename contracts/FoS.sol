@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity 0.8.4;
 
 import "@openzeppelin/contracts/token/common/ERC2981.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
@@ -8,12 +8,17 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
+/// @title A contract that allows users to mint and own an NFT of their public statement and earn MATIC per like
+/// @notice The NFTs minted are stored completely on the blockchain
+/// @custom:experimental This is an experimental contract.
 contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
-  using Counters for Counters.Counter;
-  using Strings for uint256;
-  Counters.Counter private _tokenIds;
+  
+  using Counters for Counters.Counter; 
+  Counters.Counter private _tokenIds; //tracks current tokenId
 
-  event ReceivedMATIC(address sender, uint256 amount);
+  using Strings for uint256; //easily convert uint256 to string
+
+  event ReceivedMATIC(address sender, uint256 amount); //sets event for when Matic is sent to contract
 
   struct Details {
     string expression;
@@ -23,10 +28,17 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
 
   mapping(uint256 => Details) public tokenIdToDetails;
   mapping(address => mapping(uint256 => bool)) public addressToReactionBool;
+
+  uint128 public creationFee = 0 ether;
+  uint128 public likeFee = 0 ether;
   
+  //set name and ticker of ERC721 contract and apply default royalty
   constructor() ERC721("Freedom of Speech", "FoS"){
     _setDefaultRoyalty(msg.sender, 500);
   }
+
+  //modifers -------------------------------------------------------------------------------------------------------------------------------
+
   //modifer to check if sender has already reacted to a tokenId
   modifier reactOnce(uint256 tokenId) {
     require(addressToReactionBool[msg.sender][tokenId] == false, "Can only react to a token once");
@@ -34,7 +46,9 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     _;
   }
 
-  //ERC721URIStorage and ERC2981 both override supportsInterface - to fix this we override it as well
+  //internal functions ---------------------------------------------------------------------------------------------------------------------
+
+  //ERC721URIStorage and ERC2981 both override supportsInterface - to fix this it's overwritten here as well
   function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721, ERC2981) returns (bool) {
     return super.supportsInterface(interfaceId);
   }
@@ -53,14 +67,10 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     _setTokenURI(tokenId, getTokenURI(tokenId));
   }
 
-  //Allows owner of token to burn their token
+  /// @notice Allows owner of token to burn token
+  /// @param tokenId The token Id issued upon minting the token
   function burn(uint256 tokenId) public {
     require(msg.sender == ownerOf(tokenId), "Nice try, you cannot burn someone elses token!");
-    _burn(tokenId);
-  }
-
-  //Allows owner of contract to burn any token
-  function ownerBurn(uint256 tokenId) public onlyOwner {
     _burn(tokenId);
   }
 
@@ -72,7 +82,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
         '<rect width="100%" height="100%" fill="black" />',
         '<text x="50%" y="30%" class="base" dominant-baseline="middle" text-anchor="middle">', "FoS #",tokenId.toString(),'</text>',
         '<text x="50%" y="50%" class="exp" dominant-baseline="middle" text-anchor="middle">',getExpression(tokenId),'</text>',
-        '<text x="50%" y="70%" class="base" dominant-baseline="middle" text-anchor="middle">', "Likes: ",getLikes(tokenId),'</text>',
+        '<text x="50%" y="70%" class="base" dominant-baseline="middle" text-anchor="middle">', "Likes: ",getLikes(tokenId).toString(),'</text>',
         '</svg>'
     );
     
@@ -84,33 +94,45 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     );
   }
 
-  //Given tokenId, adds a like and requests 0.1 matic to be routed to the token holder
+  /// @notice Allows user to like the expression posted on a token
+  /// @notice Requires 0.1 matic to like which is routed to current token holder
+  /// @param tokenId The token Id issued upon minting the token
   function addLike(uint256 tokenId) public payable reactOnce(tokenId) {
     require(_exists(tokenId), "Please react to an existing token");
     require(msg.value == 1e17, "Sorry, it costs 0.1 matic to like!");
     tokenIdToDetails[tokenId].likes += 1;
     _setTokenURI(tokenId, getTokenURI(tokenId));
     address to = ownerOf(tokenId);
-    (bool sent, bytes memory data) = to.call{value: msg.value}("");
+    (bool sent, ) = to.call{value: msg.value}("");
     require(sent, "Failed to send Ether");
   }
-  //Returns token likes as a string given tokenId
-  function getLikes(uint256 tokenId) public view returns (string memory) {
+
+  /// @notice Allows user to retrieve amount of likes of a specific token
+  /// @param tokenId The token Id issued upon minting the token
+  /// @return Number of likes of given token
+  function getLikes(uint256 tokenId) public view returns (uint256) {
     uint256 likes = tokenIdToDetails[tokenId].likes;
-    return likes.toString();
+    return likes;
   }
-  //Given tokenId, adds a dislike
+
+  /// @notice Allows user to dislike the expression posted on a token
+  /// @param tokenId The token Id issued upon minting the token
   function addDislike(uint256 tokenId) public reactOnce(tokenId) {
     require(_exists(tokenId), "Please react to an existing token");
     tokenIdToDetails[tokenId].dislikes += 1;
   }
-  //Returns token dislikes as a string given tokenId
-  function getDislikes(uint256 tokenId) public view returns (string memory) {
+
+  /// @notice Allows user to retrieve amount of dislikes of a specific token
+  /// @param tokenId The token Id issued upon minting the token
+  /// @return Number of likes of given token
+  function getDislikes(uint256 tokenId) public view returns (uint256) {
     uint256 dislikes = tokenIdToDetails[tokenId].dislikes;
-    return dislikes.toString();
+    return dislikes;
   }
 
-  //Returns token expression as a string given tokenId
+  /// @notice Allows user to retrieve the expression of a specific token
+  /// @param tokenId The token Id issued upon minting the token
+  /// @return Expression of given token
   function getExpression(uint256 tokenId) public view returns (string memory){
     string memory expression = tokenIdToDetails[tokenId].expression;
     return expression;
@@ -132,39 +154,49 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
         )
     );
   }
+  /// @notice Allows owner of contract to change token creation fee
+  /// @param _fee A user determined fee
+  function setCreationFee(uint128 _fee) external onlyOwner {
+    creationFee = _fee;
+  }
 
-  //Given a string and 0.5 matic, creates new token and initializes reactions, generates URI
+  /// @notice Allows user to mint and hold a token of a given expression
+  /// @notice Minting an token requires a creation fee plus gas
+  /// @param expression A user determined statement less than 64 bytes long (typically 64 characters)
   function mint(string memory expression) public payable {
-    require(msg.value == 5e17, "Sorry, it costs 0.5 matic to post!");
+    require(msg.value == creationFee, "Sorry, it costs " + creationFee.toString() + " to post!");
     require(bytes(expression).length <= 64 , "The expression is too long");
     _tokenIds.increment();
     uint256 newItemId = _tokenIds.current();
-    _safeMint(msg.sender, newItemId);
     tokenIdToDetails[newItemId].expression = expression;
     tokenIdToDetails[newItemId].likes = 0;
     tokenIdToDetails[newItemId].dislikes = 0;
     _setTokenURI(newItemId, getTokenURI(newItemId));
+    _safeMint(msg.sender, newItemId);
   }
 
-  //donation function
+  /// @notice Donate Matic to contract
   function fundme() public payable {
       emit ReceivedMATIC(msg.sender, msg.value);
   }
 
+  /// @notice Donate Matic to contract
   receive() external payable  { 
       fundme();
   }
 
+  /// @notice Donate Matic to contract
   fallback() external payable {
       fundme();
   }
 
-  //ensure MATIC cannot be trapped within the contract
+  /// @notice Allows owner of contract to withdraw donations and creation fees
   function withdraw() external onlyOwner {
     require(address(this).balance > 0, "No funds in contract");
     payable(owner()).transfer(address(this).balance);
   }
 
+  /// @notice Allows owner of contract to destroy contract
   function destroy() external onlyOwner {
     selfdestruct(payable(owner()));
   }
