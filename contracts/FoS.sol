@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity 0.8.17;
 
 import "@openzeppelin/contracts/token/common/ERC2981.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
@@ -13,35 +13,43 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   
   uint256 public tokensMinted; //tracks current tokenId
-  uint256 public tokensExisting;
+  uint256 public totalSupply;
 
   using Strings for uint256; //easily convert uint256 to string
 
   event ReceivedMATIC(address sender, uint256 amount); //sets event for when Matic is sent to contract
+  event TokenClaimed(uint256 _tokenId, address claimer, uint256 amount);
+  event TokenBurnedDown(uint256 _tokenId, uint256 feesLost);
+  event MetadataUpdate(uint256 _tokenId);
+
+  uint256 public totalUserMatic;
 
   struct Details {
     string expression;
     uint256 likes;
     uint256 dislikes;
+    uint256 feesAccrued;
   }
-  
-  /// @notice Get details of a token
-  /// return Expression, likes, and dislikes of a specific token
+
   mapping(uint256 => Details) public tokenIdToDetails;
 
   mapping(address => mapping(uint256 => bool)) internal addressToReactionBool;
 
-  /// @notice Get current creation fee
-  /// @return Current creation fee in wei
-  uint128 public creationFee = 0;
+  uint128 public creationFee;
+  uint128 public likeFee;
+  uint128 public dislikeFee;
+  uint128 public dislikeThreshold;
 
-  /// @notice Get current like fee
-  /// @return Current like fee in wei
-  uint128 public likeFee = 0;
+  bytes32 constant reserveExpression = keccak256(abi.encodePacked("BURNED"));
+
   
   //set name and ticker of ERC721 contract and apply default royalty
   constructor() ERC721("Freedom of Speech", "FoS"){
-    _setDefaultRoyalty(msg.sender, 500);
+    _setDefaultRoyalty(msg.sender, 100);
+    setCreationFee(5e17);
+    setLikeFee(1e17);
+    setDislikeFee(5e16);
+    setDislikeThreshold(3);
   }
 
   //modifers -------------------------------------------------------------------------------------------------------------------------------
@@ -63,43 +71,81 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
 
   /// @notice Allows user to mint and hold a token of a given expression
   /// @notice Minting an token requires a creation fee plus gas
-  /// @param expression A user determined statement less than 64 bytes long (typically 64 characters)
-  function mint(string memory expression) public payable {
+  /// @param _expression A user determined statement less than 64 bytes long (typically 64 characters)
+  function mint(string memory _expression) public payable returns(uint256){
     require(msg.value >= creationFee, "Sorry, minimum fee not met!");
-    require(bytes(expression).length <= 64 , "The expression is too long");
-    uint256 newItemId = tokensMinted;
-    tokenIdToDetails[newItemId].expression = expression;
-    tokenIdToDetails[newItemId].likes = 0;
-    tokenIdToDetails[newItemId].dislikes = 0;
+    require(bytes(_expression).length <= 64 , "The expression is too long");
+    require(keccak256(abi.encodePacked(_expression)) != reserveExpression, "You may not use that expression");
+    totalSupply += 1;
     tokensMinted += 1;
-    tokensExisting += 1;
+    uint256 newItemId = tokensMinted;
+    tokenIdToDetails[newItemId] = Details(_expression, 0, 0, 0);
     _safeMint(msg.sender, newItemId);
     _setTokenURI(newItemId, _getTokenURI(newItemId));
+    return newItemId;
   }
     
   /// @notice Allows user to like the expression posted on a token
   /// @notice Requires a small fee to like, which is routed to current token holder
   /// @param _tokenId The token Id issued upon minting the token
   function addLike(uint256 _tokenId) public payable reactOnce(_tokenId) tokenExists(_tokenId) {
-    require(msg.value >= likeFee, "Sorry, minimum fee not met!");
-    (bool sent, ) = ownerOf(_tokenId).call{value: msg.value}("");
-    require(sent, "Failed to send Matic");
+    uint256 _fee = msg.value;
+    require(_fee >= likeFee, "Sorry, minimum fee not met!");
+    totalUserMatic += _fee;
     tokenIdToDetails[_tokenId].likes += 1;
+    tokenIdToDetails[_tokenId].feesAccrued += _fee;
     _setTokenURI(_tokenId, _getTokenURI(_tokenId));
+    emit MetadataUpdate(_tokenId);
   }
 
   /// @notice Allows user to dislike the expression posted on a token
   /// @param _tokenId The token Id issued upon minting the token
-  function addDislike(uint256 _tokenId) public reactOnce(_tokenId) tokenExists(_tokenId) {
+  function addDislike(uint256 _tokenId) public payable reactOnce(_tokenId) tokenExists(_tokenId) {
+    uint256 _fee = msg.value;
+    require(_fee >= dislikeFee, "Sorry, minimum fee not met!");
+    totalUserMatic += _fee;
     tokenIdToDetails[_tokenId].dislikes += 1;
+    uint256 _tokensExisting = totalSupply;
+    uint256 _tokensMinted = tokensMinted;
+    uint256 _dislikes = tokenIdToDetails[_tokenId].dislikes;
+    if(_dislikes >= dislikeThreshold && _dislikes >= (tokenIdToDetails[_tokenId].likes*2)){
+      uint256 _feesAccruedForToken = tokenIdToDetails[_tokenId].feesAccrued;
+      _burn(_tokenId);
+      for(uint i = 1; i <= _tokensMinted; i++){
+        if(i != _tokenId){
+          if(_exists(i)){
+            tokenIdToDetails[i].feesAccrued += (_fee + _feesAccruedForToken) / (_tokensExisting - 1);
+          }
+        }
+      }
+      emit TokenBurnedDown(_tokenId, _feesAccruedForToken);
+         
+    } else {
+        for(uint i = 1; i <= _tokensMinted; i++){
+          if(i != _tokenId){
+            if(_exists(i)){
+              tokenIdToDetails[i].feesAccrued += _fee / (_tokensExisting - 1);
+            }
+          }
+        }
+        _setTokenURI(_tokenId, _getTokenURI(_tokenId));
+        emit MetadataUpdate(_tokenId);
+    }
   }
 
   /// @notice Allows owner of token to burn token
   /// @param _tokenId The token Id issued upon minting the token
-  function burn(uint256 _tokenId) public {
-    require(msg.sender == ownerOf(_tokenId), "Nice try, you cannot burn someone elses token!");
-    tokensExisting -= 1;
+  function claimToken(uint256 _tokenId) public tokenExists(_tokenId){
+    address _sender = msg.sender;
+    require(_sender == ownerOf(_tokenId), "Nice try, you cannot claim someone elses token!");
+    uint256 _funds = tokenIdToDetails[_tokenId].feesAccrued;
+    totalUserMatic -= _funds;
     _burn(_tokenId);
+    if(_funds !=0){
+      (bool sent, ) = _sender.call{value: _funds}("");
+      require(sent, "Failed to send Matic");
+    }
+    emit TokenClaimed(_tokenId, _sender, _funds);
   }
   
   //getter functions ------------------------------------------------------------------------------------------------------------------------
@@ -114,10 +160,18 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
 
   /// @notice Allows user to retrieve amount of dislikes of a specific token
   /// @param _tokenId The token Id issued upon minting the token
-  /// @return Number of likes of given token
+  /// @return Number of dislikes of given token
   function getDislikes(uint256 _tokenId) public view tokenExists(_tokenId) returns (uint256) {
     uint256 dislikes = tokenIdToDetails[_tokenId].dislikes;
     return dislikes;
+  }
+  
+  /// @notice Allows user to retrieve amount of dislikes of a specific token
+  /// @param _tokenId The token Id issued upon minting the token
+  /// @return Total fees accrued for a specified token
+  function getfeesAccrued(uint256 _tokenId) public view tokenExists(_tokenId) returns (uint256) {
+    uint256 fees = tokenIdToDetails[_tokenId].feesAccrued;
+    return fees;
   }
 
   /// @notice Allows user to retrieve the expression of a specific token
@@ -129,32 +183,41 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   }
 
   //ERC721URIStorage and ERC2981 both override supportsInterface - to fix this it's overwritten here as well
-  function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721, ERC2981) returns (bool) {
-    return super.supportsInterface(interfaceId);
-  }
-
-  function totalSupply() external view returns(uint256){
-    return tokensExisting;
+  function supportsInterface(bytes4 _interfaceId) public view virtual override(ERC721, ERC2981) returns (bool) {
+    return super.supportsInterface(_interfaceId);
   }
 
   //owner functions -------------------------------------------------------------------------------------------------------------------------
 
   /// @notice onlyOwner - Allows owner of contract to change token creation fee
-  /// @param _fee A user determined fee in wei
-  function setCreationFee(uint128 _fee) external onlyOwner {
+  /// @param _fee An owner determined fee in wei
+  function setCreationFee(uint128 _fee) public onlyOwner {
     creationFee = _fee;
   }
 
   /// @notice onlyOwner - Allows owner of contract to change token like fee
-  /// @param _fee A user determined fee in wei
-  function setLikeFee(uint128 _fee) external onlyOwner {
+  /// @param _fee An owner determined fee in wei
+  function setLikeFee(uint128 _fee) public onlyOwner {
     likeFee = _fee;
   }
 
+  /// @notice onlyOwner - Allows owner of contract to change token like fee
+  /// @param _fee An owner determined fee in wei
+  function setDislikeFee(uint128 _fee) public onlyOwner {
+    dislikeFee = _fee;
+  }
+
+    /// @notice onlyOwner - Allows owner of contract to change token like fee
+  /// @param _dislikes An owner determined value for automatic burn
+  function setDislikeThreshold(uint128 _dislikes) public onlyOwner {
+    dislikeThreshold = _dislikes;
+  }
+
   /// @notice onlyOwner - Allows owner of contract to withdraw donations and creation fees
-  function withdraw() external onlyOwner {
-    require(address(this).balance > 0, "No funds in contract");
-    payable(owner()).transfer(address(this).balance);
+  function withdraw(uint256 _amount, address _address) external onlyOwner {
+    require(address(this).balance > totalUserMatic, "No contract funds available");
+    require(_amount <= (address(this).balance - totalUserMatic), "Amount too high");
+    payable(_address).transfer(_amount);
   }
 
   /// @notice onlyOwner - Allows owner of contract to destroy contract
@@ -169,27 +232,29 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
    * and details within contract storage.
    */
   function _burn(uint256 _tokenId) internal virtual override {
-    super._burn(_tokenId);
+    totalSupply -= 1;
     _resetTokenRoyalty(_tokenId);
     _resetTokenDetails(_tokenId);
+    _setTokenURI(_tokenId, _getTokenURI(_tokenId));
+    emit MetadataUpdate(_tokenId);
+    super._burn(_tokenId);
   }
 
   /// @dev Resets tokenIdToDetails struct within contract
   function _resetTokenDetails(uint256 _tokenId) internal {
-    tokenIdToDetails[_tokenId].expression = "DELETED";
-    tokenIdToDetails[_tokenId].likes = 0;
-    tokenIdToDetails[_tokenId].dislikes = 0;
+    tokenIdToDetails[_tokenId] = Details("BURNED", 0, 0, 0);
   }
 
   /// @dev Generates svg creation for storing dynamic token images on-chain
-  function _generateImage(uint256 _tokenId) internal view returns(string memory){
+  function _generateImage(string memory _tokenId, string memory _expression, string memory _likes, string memory _dislikes) internal pure returns(string memory){
     bytes memory svg = abi.encodePacked(
         '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350">',
-        '<style>.base { fill: white; font-family: serif; font-size: 16px; font-weight: bold; } .exp{ fill: darkturquoise; font-family: serif; font-size: 12px; font-weight: bold;}</style>',
+        '<style>.base{ fill: white; font-family: serif; font-size: 14px; font-weight: bold;} .exp{ fill: darkturquoise; font-family: serif; font-size: 12px;} .stats{ fill: white; font-family: serif; font-size: 12px;}</style>',
         '<rect width="100%" height="100%" fill="black" />',
-        '<text x="50%" y="30%" class="base" dominant-baseline="middle" text-anchor="middle">', "FoS #",_tokenId.toString(),'</text>',
-        '<text x="50%" y="50%" class="exp" dominant-baseline="middle" text-anchor="middle">',getExpression(_tokenId),'</text>',
-        '<text x="50%" y="70%" class="base" dominant-baseline="middle" text-anchor="middle">', "Likes: ",getLikes(_tokenId).toString(),'</text>',
+        '<text x="50%" y="30%" class="base" dominant-baseline="middle" text-anchor="middle">', "FoS #", _tokenId,'</text>',
+        '<text x="50%" y="50%" class="exp" dominant-baseline="middle" text-anchor="middle">', _expression,'</text>',
+        '<text x="50%" y="70%" class="stats" dominant-baseline="middle" text-anchor="middle">', "Likes: ", _likes,'</text>',
+        '<text x="50%" y="80%" class="stats" dominant-baseline="middle" text-anchor="middle">', "Dislikes: ", _dislikes,'</text>',
         '</svg>'
     );
     
@@ -202,12 +267,20 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   }
 
   /// @dev Generates token URI to be set when token is minted or likes are added
-  function _getTokenURI(uint256 _tokenId) internal view returns (string memory){
+  function _getTokenURI(uint256 tokenId) internal view returns (string memory){
+
+    string memory _tokenId = tokenId.toString();
+    string memory _expression = getExpression(tokenId);
+    string memory _likes = getLikes(tokenId).toString();
+    string memory _dislikes = getDislikes(tokenId).toString();
+
     bytes memory dataURI = abi.encodePacked(
         '{',
-            '"name": "FoS #', _tokenId.toString(), '",',
-            '"description": "', getExpression(_tokenId), '",',
-            '"image_data": "', _generateImage(_tokenId), '"',
+            '"name": "FoS #', _tokenId, '",',
+            '"external_url": " ",',
+            '"description": "', _expression, '",',
+            '"image_data": "', _generateImage(_tokenId, _expression, _likes, _dislikes), '",',
+            '"attributes": [{"trait_type": "likes", "value": ', _likes,'}, {"trait_type": "dislikes", "value": ', _dislikes,'}, {"trait_type": "fees accrued", "value": ', tokenIdToDetails[tokenId].feesAccrued.toString(),'}]'
         '}'
     );
     return string(
