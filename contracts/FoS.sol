@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/token/common/ERC2981.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
 
 /// @title A contract that allows users to mint and own an NFT of their public statement and earn MATIC per like
 /// @notice The NFTs minted, and their metadata, are stored completely on the blockchain
@@ -17,7 +16,10 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
 
   using Strings for uint256; //easily convert uint256 to string
 
-  event ReceivedMATIC(address sender, uint256 amount); //sets event for when Matic is sent to contract
+  event ReceivedMATIC(address _address, uint256 _amount); //sets event for when Matic is sent to contract
+  event FeeValueChange(address _address, string _fee, uint256 _amount);
+  event DislikeThresholdChange(address _address, uint256 _amount);
+  event Withdraw(address _address, uint256 _amount);
   event TokenClaimed(uint256 _tokenId, address claimer, uint256 amount);
   event TokenBurnedDown(uint256 _tokenId, uint256 feesLost);
   event MetadataUpdate(uint256 _tokenId);
@@ -40,7 +42,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   uint128 public dislikeFee;
   uint128 public dislikeThreshold;
 
-  bytes32 constant reserveExpression = keccak256(abi.encodePacked("BURNED"));
+  bytes32 constant RESERVE_EXPRESSION = keccak256(abi.encodePacked("BURNED"));
 
   
   //set name and ticker of ERC721 contract and apply default royalty
@@ -75,13 +77,13 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   function mint(string memory _expression) public payable returns(uint256){
     require(msg.value >= creationFee, "Sorry, minimum fee not met!");
     require(bytes(_expression).length <= 64 , "The expression is too long");
-    require(keccak256(abi.encodePacked(_expression)) != reserveExpression, "You may not use that expression");
+    require(keccak256(abi.encodePacked(_expression)) != RESERVE_EXPRESSION, "You may not use that expression");
     totalSupply += 1;
     tokensMinted += 1;
     uint256 newItemId = tokensMinted;
     tokenIdToDetails[newItemId] = Details(_expression, 0, 0, 0);
-    _safeMint(msg.sender, newItemId);
     _setTokenURI(newItemId, _getTokenURI(newItemId));
+    _safeMint(msg.sender, newItemId);
     return newItemId;
   }
     
@@ -142,8 +144,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     totalUserMatic -= _funds;
     _burn(_tokenId);
     if(_funds !=0){
-      (bool sent, ) = _sender.call{value: _funds}("");
-      require(sent, "Failed to send Matic");
+      payable(_sender).transfer(_funds);
     }
     emit TokenClaimed(_tokenId, _sender, _funds);
   }
@@ -193,28 +194,34 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   /// @param _fee An owner determined fee in wei
   function setCreationFee(uint128 _fee) public onlyOwner {
     creationFee = _fee;
+    emit FeeValueChange(msg.sender, "Creation Fee", _fee);
   }
 
   /// @notice onlyOwner - Allows owner of contract to change token like fee
   /// @param _fee An owner determined fee in wei
   function setLikeFee(uint128 _fee) public onlyOwner {
     likeFee = _fee;
+    emit FeeValueChange(msg.sender, "Like Fee", _fee);
   }
 
   /// @notice onlyOwner - Allows owner of contract to change token like fee
   /// @param _fee An owner determined fee in wei
   function setDislikeFee(uint128 _fee) public onlyOwner {
     dislikeFee = _fee;
+    emit FeeValueChange(msg.sender, "Dislike Fee", _fee);
   }
 
     /// @notice onlyOwner - Allows owner of contract to change token like fee
   /// @param _dislikes An owner determined value for automatic burn
   function setDislikeThreshold(uint128 _dislikes) public onlyOwner {
     dislikeThreshold = _dislikes;
+    emit DislikeThresholdChange(msg.sender, _dislikes);
   }
 
   /// @notice onlyOwner - Allows owner of contract to withdraw donations and creation fees
   function withdraw(uint256 _amount, address _address) external onlyOwner {
+    require(_address != address(0), "Invalid address");
+    require(_amount != 0, "Amount cannot be 0");
     require(address(this).balance > totalUserMatic, "No contract funds available");
     require(_amount <= (address(this).balance - totalUserMatic), "Amount too high");
     payable(_address).transfer(_amount);
