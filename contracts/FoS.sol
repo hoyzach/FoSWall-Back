@@ -64,8 +64,8 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     tokensMinted += 1;
     uint256 newItemId = tokensMinted;
     tokenIdToDetails[newItemId] = Details(_expression, 0, 0, 0);
-    _setTokenURI(newItemId, _getTokenURI(newItemId));
     _safeMint(msg.sender, newItemId);
+    _setTokenURI(newItemId, _generateTokenURI(newItemId));
     return newItemId;
   }
     
@@ -80,7 +80,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     totalUserMatic += _fee;
     tokenIdToDetails[_tokenId].likes += 1;
     tokenIdToDetails[_tokenId].feesAccrued += _fee;
-    _setTokenURI(_tokenId, _getTokenURI(_tokenId));
+    _setTokenURI(_tokenId, _generateTokenURI(_tokenId));
     emit MetadataUpdate(_tokenId);
   }
 
@@ -116,9 +116,9 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
             }
           }
         }
+      _setTokenURI(_tokenId, _generateTokenURI(_tokenId));
+      emit MetadataUpdate(_tokenId);
     }
-    _setTokenURI(_tokenId, _getTokenURI(_tokenId));
-    emit MetadataUpdate(_tokenId);
   }
 
   /// @notice Allows owner of token to burn token
@@ -227,9 +227,9 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     totalSupply -= 1;
     _resetTokenRoyalty(_tokenId);
     _resetTokenDetails(_tokenId);
-    _setTokenURI(_tokenId, _getTokenURI(_tokenId));
+    _setTokenURI(_tokenId, _generateTokenURI(_tokenId));
     emit MetadataUpdate(_tokenId);
-    super._burn(_tokenId);
+    ERC721._burn(_tokenId);
   }
 
   /// @dev Resets tokenIdToDetails struct within contract
@@ -259,7 +259,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   }
 
   /// @dev Generates token URI to be set when token is minted or likes are added
-  function _getTokenURI(uint256 tokenId) internal view returns (string memory){
+  function _generateTokenURI(uint256 tokenId) internal view returns (string memory){
 
     string memory _tokenId = tokenId.toString();
     string memory _expression = getExpression(tokenId);
