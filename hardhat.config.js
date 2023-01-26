@@ -3,7 +3,15 @@ require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-etherscan");
 
 module.exports = {
-  solidity: "0.8.17",
+  solidity: {
+    version: "0.8.17",
+    settings: {
+      optimizer: {
+        enabled: false,
+        runs: 200,
+      }
+    }
+  },
   networks: {
     mumbai: {
       url: process.env.TESTNET_RPC,

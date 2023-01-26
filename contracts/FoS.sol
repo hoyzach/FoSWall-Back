@@ -16,12 +16,14 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
 
   using Strings for uint256; //easily convert uint256 to string
 
-  event ReceivedMATIC(address _address, uint256 _amount); //sets event for when Matic is sent to contract
-  event FeeValueChange(address _address, string _fee, uint256 _amount);
-  event DislikeThresholdChange(address _address, uint256 _amount);
-  event Withdraw(address _address, uint256 _amount);
-  event TokenClaimed(uint256 _tokenId, address claimer, uint256 amount);
-  event TokenBurnedDown(uint256 _tokenId, uint256 feesLost);
+  event ReceivedMATIC(address indexed _address, uint256 _amount);
+  event LikeFeeChange(uint256 _amount);
+  event DislikeFeeChange(uint256 _amount);
+  event CreationFeeChange(uint256 _amount);
+  event DislikeThresholdChange(uint256 _amount);
+  event Withdraw(address indexed _address, uint256 _amount);
+  event TokenClaimed(uint256 indexed _tokenId, address _claimer, uint256 _amount);
+  event TokenBurnedDown(uint256 indexed _tokenId, uint256 feesLost);
   event MetadataUpdate(uint256 _tokenId);
 
   uint256 public totalUserMatic;
@@ -37,36 +39,16 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
 
   mapping(address => mapping(uint256 => bool)) internal addressToReactionBool;
 
-  uint128 public creationFee;
-  uint128 public likeFee;
-  uint128 public dislikeFee;
-  uint128 public dislikeThreshold;
+  uint64 public creationFee;
+  uint64 public likeFee;
+  uint64 public dislikeFee;
+  uint64 public dislikeThreshold;
 
   bytes32 constant RESERVE_EXPRESSION = keccak256(abi.encodePacked("BURNED"));
-
   
   //set name and ticker of ERC721 contract and apply default royalty
   constructor() ERC721("Freedom of Speech", "FoS"){
     _setDefaultRoyalty(msg.sender, 100);
-    setCreationFee(5e17);
-    setLikeFee(1e17);
-    setDislikeFee(5e16);
-    setDislikeThreshold(3);
-  }
-
-  //modifers -------------------------------------------------------------------------------------------------------------------------------
-
-  //modifer to check if sender has already reacted to a tokenId
-  modifier reactOnce(uint256 _tokenId) {
-    require(addressToReactionBool[msg.sender][_tokenId] == false, "Can only react to a token once");
-    addressToReactionBool[msg.sender][_tokenId] = true;
-    _;
-  }
-
-  //modifer to check if sender has already reacted to a tokenId
-  modifier tokenExists(uint256 _tokenId) {
-    require(_exists(_tokenId), "Token does not exist!");
-    _;
   }
 
   //interaction functions ---------------------------------------------------------------------------------------------------------------------
@@ -74,7 +56,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   /// @notice Allows user to mint and hold a token of a given expression
   /// @notice Minting an token requires a creation fee plus gas
   /// @param _expression A user determined statement less than 64 bytes long (typically 64 characters)
-  function mint(string memory _expression) public payable returns(uint256){
+  function mint(string memory _expression) external payable returns(uint256){
     require(msg.value >= creationFee, "Sorry, minimum fee not met!");
     require(bytes(_expression).length <= 64 , "The expression is too long");
     require(keccak256(abi.encodePacked(_expression)) != RESERVE_EXPRESSION, "You may not use that expression");
@@ -90,7 +72,9 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   /// @notice Allows user to like the expression posted on a token
   /// @notice Requires a small fee to like, which is routed to current token holder
   /// @param _tokenId The token Id issued upon minting the token
-  function addLike(uint256 _tokenId) public payable reactOnce(_tokenId) tokenExists(_tokenId) {
+  function addLike(uint256 _tokenId) external payable {
+    require(addressToReactionBool[msg.sender][_tokenId] == false, "Can only react to a token once");
+    addressToReactionBool[msg.sender][_tokenId] = true;
     uint256 _fee = msg.value;
     require(_fee >= likeFee, "Sorry, minimum fee not met!");
     totalUserMatic += _fee;
@@ -102,7 +86,9 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
 
   /// @notice Allows user to dislike the expression posted on a token
   /// @param _tokenId The token Id issued upon minting the token
-  function addDislike(uint256 _tokenId) public payable reactOnce(_tokenId) tokenExists(_tokenId) {
+  function addDislike(uint256 _tokenId) external payable {
+    require(addressToReactionBool[msg.sender][_tokenId] == false, "Can only react to a token once");
+    addressToReactionBool[msg.sender][_tokenId] = true;
     uint256 _fee = msg.value;
     require(_fee >= dislikeFee, "Sorry, minimum fee not met!");
     totalUserMatic += _fee;
@@ -130,14 +116,14 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
             }
           }
         }
-        _setTokenURI(_tokenId, _getTokenURI(_tokenId));
-        emit MetadataUpdate(_tokenId);
     }
+    _setTokenURI(_tokenId, _getTokenURI(_tokenId));
+    emit MetadataUpdate(_tokenId);
   }
 
   /// @notice Allows owner of token to burn token
   /// @param _tokenId The token Id issued upon minting the token
-  function claimToken(uint256 _tokenId) public tokenExists(_tokenId){
+  function claimToken(uint256 _tokenId) external {
     address _sender = msg.sender;
     require(_sender == ownerOf(_tokenId), "Nice try, you cannot claim someone elses token!");
     uint256 _funds = tokenIdToDetails[_tokenId].feesAccrued;
@@ -154,7 +140,8 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   /// @notice Allows user to retrieve amount of likes of a specific token
   /// @param _tokenId The token Id issued upon minting the token
   /// @return Number of likes of given token
-  function getLikes(uint256 _tokenId) public view tokenExists(_tokenId) returns (uint256) {
+  function getLikes(uint256 _tokenId) public view returns (uint256) {
+    require(_exists(_tokenId), "Token does not exist!");
     uint256 likes = tokenIdToDetails[_tokenId].likes;
     return likes;
   }
@@ -162,7 +149,8 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   /// @notice Allows user to retrieve amount of dislikes of a specific token
   /// @param _tokenId The token Id issued upon minting the token
   /// @return Number of dislikes of given token
-  function getDislikes(uint256 _tokenId) public view tokenExists(_tokenId) returns (uint256) {
+  function getDislikes(uint256 _tokenId) public view returns (uint256) {
+    require(_exists(_tokenId), "Token does not exist!");
     uint256 dislikes = tokenIdToDetails[_tokenId].dislikes;
     return dislikes;
   }
@@ -170,7 +158,8 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   /// @notice Allows user to retrieve amount of dislikes of a specific token
   /// @param _tokenId The token Id issued upon minting the token
   /// @return Total fees accrued for a specified token
-  function getfeesAccrued(uint256 _tokenId) public view tokenExists(_tokenId) returns (uint256) {
+  function getfeesAccrued(uint256 _tokenId) public view returns (uint256) {
+    require(_exists(_tokenId), "Token does not exist!");
     uint256 fees = tokenIdToDetails[_tokenId].feesAccrued;
     return fees;
   }
@@ -178,7 +167,8 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   /// @notice Allows user to retrieve the expression of a specific token
   /// @param _tokenId The token Id issued upon minting the token
   /// @return Expression of given token
-  function getExpression(uint256 _tokenId) public view tokenExists(_tokenId) returns (string memory){
+  function getExpression(uint256 _tokenId) public view returns (string memory){
+    require(_exists(_tokenId), "Token does not exist!");
     string memory expression = tokenIdToDetails[_tokenId].expression;
     return expression;
   }
@@ -192,30 +182,30 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
 
   /// @notice onlyOwner - Allows owner of contract to change token creation fee
   /// @param _fee An owner determined fee in wei
-  function setCreationFee(uint128 _fee) public onlyOwner {
+  function setCreationFee(uint64 _fee) external onlyOwner {
     creationFee = _fee;
-    emit FeeValueChange(msg.sender, "Creation Fee", _fee);
+    emit CreationFeeChange(_fee);
   }
 
   /// @notice onlyOwner - Allows owner of contract to change token like fee
   /// @param _fee An owner determined fee in wei
-  function setLikeFee(uint128 _fee) public onlyOwner {
+  function setLikeFee(uint64 _fee) external onlyOwner {
     likeFee = _fee;
-    emit FeeValueChange(msg.sender, "Like Fee", _fee);
+    emit LikeFeeChange(_fee);
   }
 
   /// @notice onlyOwner - Allows owner of contract to change token like fee
   /// @param _fee An owner determined fee in wei
-  function setDislikeFee(uint128 _fee) public onlyOwner {
+  function setDislikeFee(uint64 _fee) external onlyOwner {
     dislikeFee = _fee;
-    emit FeeValueChange(msg.sender, "Dislike Fee", _fee);
+    emit DislikeFeeChange(_fee);
   }
 
     /// @notice onlyOwner - Allows owner of contract to change token like fee
   /// @param _dislikes An owner determined value for automatic burn
-  function setDislikeThreshold(uint128 _dislikes) public onlyOwner {
+  function setDislikeThreshold(uint64 _dislikes) external onlyOwner {
     dislikeThreshold = _dislikes;
-    emit DislikeThresholdChange(msg.sender, _dislikes);
+    emit DislikeThresholdChange(_dislikes);
   }
 
   /// @notice onlyOwner - Allows owner of contract to withdraw donations and creation fees
@@ -225,11 +215,6 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     require(address(this).balance > totalUserMatic, "No contract funds available");
     require(_amount <= (address(this).balance - totalUserMatic), "Amount too high");
     payable(_address).transfer(_amount);
-  }
-
-  /// @notice onlyOwner - Allows owner of contract to destroy contract
-  function destroy() external onlyOwner {
-    selfdestruct(payable(owner()));
   }
 
   //internal functions ----------------------------------------------------------------------------------------------------------------------
