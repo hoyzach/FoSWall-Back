@@ -1,6 +1,7 @@
 require("dotenv").config();
 require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-etherscan");
+require('hardhat-contract-sizer');
 
 module.exports = {
   solidity: {
@@ -8,7 +9,10 @@ module.exports = {
     settings: {
       optimizer: {
         enabled: false,
-        runs: 200,
+        runs: 500,
+        details: {
+          yul: false
+        }
       }
     }
   },

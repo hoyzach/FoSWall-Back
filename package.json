@@ -1,7 +1,7 @@
 {
   "name": "foswall",
   "dependencies": {
-    "@openzeppelin/contracts": "^4.7.3"
+    "@openzeppelin/contracts": "^4.9.0"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.1.1",
@@ -10,7 +10,8 @@
     "dotenv": "^16.0.3",
     "ethereum-waffle": "^3.4.4",
     "ethers": "^5.7.1",
-    "hardhat": "^2.11.2"
+    "hardhat": "^2.11.2",
+    "hardhat-contract-sizer": "^2.9.0"
   },
   "version": "1.0.0",
   "main": "hardhat.config.js",

@@ -22,9 +22,11 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   event CreationFeeChange(uint256 _amount);
   event DislikeThresholdChange(uint256 _amount);
   event Withdraw(address indexed _address, uint256 _amount);
+  event TokenMinted(uint256 indexed _tokenId, address _minter);
+  event TokenLiked(uint256 indexed _tokenId, address _liker);
+  event TokenDisliked(uint256 indexed _tokenId, address _disliker);
   event TokenClaimed(uint256 indexed _tokenId, address _claimer, uint256 _amount);
   event TokenBurnedDown(uint256 indexed _tokenId, uint256 feesLost);
-  event MetadataUpdate(uint256 _tokenId);
 
   uint256 public totalUserMatic;
 
@@ -54,43 +56,48 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   //interaction functions ---------------------------------------------------------------------------------------------------------------------
 
   /// @notice Allows user to mint and hold a token of a given expression
-  /// @notice Minting an token requires a creation fee plus gas
+  /// @notice Minting a token requires a creation fee plus gas
   /// @param _expression A user determined statement less than 64 bytes long (typically 64 characters)
   function mint(string memory _expression) external payable returns(uint256){
-    require(msg.value >= creationFee, "Sorry, minimum fee not met!");
-    require(bytes(_expression).length <= 64 , "The expression is too long");
-    require(keccak256(abi.encodePacked(_expression)) != RESERVE_EXPRESSION, "You may not use that expression");
+    require(msg.value >= creationFee, "Minimum fee not met!");
+    require(bytes(_expression).length <= 64 , "Expression is too long");
+    require(keccak256(abi.encodePacked(_expression)) != RESERVE_EXPRESSION, "Expression denied");
     totalSupply += 1;
     tokensMinted += 1;
     uint256 newItemId = tokensMinted;
     tokenIdToDetails[newItemId] = Details(_expression, 0, 0, 0);
     _safeMint(msg.sender, newItemId);
     _setTokenURI(newItemId, _generateTokenURI(newItemId));
+    emit TokenMinted(newItemId, msg.sender);
     return newItemId;
   }
     
   /// @notice Allows user to like the expression posted on a token
-  /// @notice Requires a small fee to like, which is routed to current token holder
+  /// @notice Requires a small fee to like, which is routed to the current token holders reserve
   /// @param _tokenId The token Id issued upon minting the token
   function addLike(uint256 _tokenId) external payable {
     require(addressToReactionBool[msg.sender][_tokenId] == false, "Can only react to a token once");
     addressToReactionBool[msg.sender][_tokenId] = true;
     uint256 _fee = msg.value;
-    require(_fee >= likeFee, "Sorry, minimum fee not met!");
+    require(_fee >= likeFee, "Minimum fee not met!");
     totalUserMatic += _fee;
     tokenIdToDetails[_tokenId].likes += 1;
     tokenIdToDetails[_tokenId].feesAccrued += _fee;
     _setTokenURI(_tokenId, _generateTokenURI(_tokenId));
     emit MetadataUpdate(_tokenId);
+    emit TokenLiked(_tokenId, msg.sender);
   }
 
   /// @notice Allows user to dislike the expression posted on a token
+  /// @notice Requires a small fee to dislike, which is routed to all other token holders' reserves
+  /// @notice If the number of dislikes is over the threshold AND greater than 2 x the tokens likes,
+  ///         the token is burned and it's fee reserve is distributed to all other token holders' reserves
   /// @param _tokenId The token Id issued upon minting the token
   function addDislike(uint256 _tokenId) external payable {
     require(addressToReactionBool[msg.sender][_tokenId] == false, "Can only react to a token once");
     addressToReactionBool[msg.sender][_tokenId] = true;
     uint256 _fee = msg.value;
-    require(_fee >= dislikeFee, "Sorry, minimum fee not met!");
+    require(_fee >= dislikeFee, "Minimum fee not met!");
     totalUserMatic += _fee;
     tokenIdToDetails[_tokenId].dislikes += 1;
     uint256 _tokensExisting = totalSupply;
@@ -119,17 +126,18 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
       _setTokenURI(_tokenId, _generateTokenURI(_tokenId));
       emit MetadataUpdate(_tokenId);
     }
+    emit TokenDisliked(_tokenId, msg.sender);
   }
 
   /// @notice Allows owner of token to burn token
   /// @param _tokenId The token Id issued upon minting the token
   function claimToken(uint256 _tokenId) external {
     address _sender = msg.sender;
-    require(_sender == ownerOf(_tokenId), "Nice try, you cannot claim someone elses token!");
+    require(_sender == ownerOf(_tokenId), "Not Owner!");
     uint256 _funds = tokenIdToDetails[_tokenId].feesAccrued;
     totalUserMatic -= _funds;
     _burn(_tokenId);
-    if(_funds !=0){
+    if(_funds > 0){
       payable(_sender).transfer(_funds);
     }
     emit TokenClaimed(_tokenId, _sender, _funds);
@@ -174,7 +182,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   }
 
   //ERC721URIStorage and ERC2981 both override supportsInterface - to fix this it's overwritten here as well
-  function supportsInterface(bytes4 _interfaceId) public view virtual override(ERC721, ERC2981) returns (bool) {
+  function supportsInterface(bytes4 _interfaceId) public view virtual override(ERC721URIStorage, ERC2981) returns (bool) {
     return super.supportsInterface(_interfaceId);
   }
 
@@ -243,13 +251,12 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
         '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350">',
         '<style>.base{ fill: white; font-family: serif; font-size: 14px; font-weight: bold;} .exp{ fill: darkturquoise; font-family: serif; font-size: 12px;} .stats{ fill: white; font-family: serif; font-size: 12px;}</style>',
         '<rect width="100%" height="100%" fill="black" />',
-        '<text x="50%" y="30%" class="base" dominant-baseline="middle" text-anchor="middle">', "FoS #", _tokenId,'</text>',
+        '<text x="50%" y="25%" class="base" dominant-baseline="middle" text-anchor="middle">', "FoS #", _tokenId,'</text>',
         '<text x="50%" y="50%" class="exp" dominant-baseline="middle" text-anchor="middle">', _expression,'</text>',
         '<text x="50%" y="70%" class="stats" dominant-baseline="middle" text-anchor="middle">', "Likes: ", _likes,'</text>',
         '<text x="50%" y="80%" class="stats" dominant-baseline="middle" text-anchor="middle">', "Dislikes: ", _dislikes,'</text>',
         '</svg>'
     );
-    
     return string(
         abi.encodePacked(
             "data:image/svg+xml;base64,",
@@ -299,5 +306,4 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   fallback() external payable {
       fundme();
   }
-
 }
