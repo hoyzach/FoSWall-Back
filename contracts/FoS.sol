@@ -50,7 +50,11 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   
   //set name and ticker of ERC721 contract and apply default royalty
   constructor() ERC721("Freedom of Speech", "FoS"){
-    _setDefaultRoyalty(msg.sender, 100);
+    _setDefaultRoyalty(msg.sender, 250);
+    setCreationFee(500000000000000000); // 0.5 matic
+    setLikeFee(100000000000000000); // 0.1 matic
+    setDislikeFee(50000000000000000); // 0.05 matic
+    setDislikeThreshold(2);
   }
 
   //interaction functions ---------------------------------------------------------------------------------------------------------------------
@@ -190,28 +194,28 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
 
   /// @notice onlyOwner - Allows owner of contract to change token creation fee
   /// @param _fee An owner determined fee in wei
-  function setCreationFee(uint64 _fee) external onlyOwner {
+  function setCreationFee(uint64 _fee) public onlyOwner {
     creationFee = _fee;
     emit CreationFeeChange(_fee);
   }
 
   /// @notice onlyOwner - Allows owner of contract to change token like fee
   /// @param _fee An owner determined fee in wei
-  function setLikeFee(uint64 _fee) external onlyOwner {
+  function setLikeFee(uint64 _fee) public onlyOwner {
     likeFee = _fee;
     emit LikeFeeChange(_fee);
   }
 
   /// @notice onlyOwner - Allows owner of contract to change token like fee
   /// @param _fee An owner determined fee in wei
-  function setDislikeFee(uint64 _fee) external onlyOwner {
+  function setDislikeFee(uint64 _fee) public onlyOwner {
     dislikeFee = _fee;
     emit DislikeFeeChange(_fee);
   }
 
     /// @notice onlyOwner - Allows owner of contract to change token like fee
   /// @param _dislikes An owner determined value for automatic burn
-  function setDislikeThreshold(uint64 _dislikes) external onlyOwner {
+  function setDislikeThreshold(uint64 _dislikes) public onlyOwner {
     dislikeThreshold = _dislikes;
     emit DislikeThresholdChange(_dislikes);
   }
