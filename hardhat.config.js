@@ -8,8 +8,8 @@ module.exports = {
     version: "0.8.17",
     settings: {
       optimizer: {
-        enabled: false,
-        runs: 500,
+        enabled: true,
+        runs: 40000,
         details: {
           yul: false
         }

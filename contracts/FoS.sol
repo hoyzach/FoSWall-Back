@@ -71,8 +71,8 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     uint256 newItemId = tokensMinted;
     tokenIdToDetails[newItemId] = Details(_expression, 0, 0, 0);
     _safeMint(msg.sender, newItemId);
-    _setTokenURI(newItemId, _generateTokenURI(newItemId));
     emit TokenMinted(newItemId, msg.sender);
+    _setTokenURI(newItemId, _generateTokenURI(newItemId));
     return newItemId;
   }
     
@@ -88,7 +88,6 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     tokenIdToDetails[_tokenId].likes += 1;
     tokenIdToDetails[_tokenId].feesAccrued += _fee;
     _setTokenURI(_tokenId, _generateTokenURI(_tokenId));
-    emit MetadataUpdate(_tokenId);
     emit TokenLiked(_tokenId, msg.sender);
   }
 
@@ -128,7 +127,6 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
           }
         }
       _setTokenURI(_tokenId, _generateTokenURI(_tokenId));
-      emit MetadataUpdate(_tokenId);
     }
     emit TokenDisliked(_tokenId, msg.sender);
   }
@@ -240,7 +238,6 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     _resetTokenRoyalty(_tokenId);
     _resetTokenDetails(_tokenId);
     _setTokenURI(_tokenId, _generateTokenURI(_tokenId));
-    emit MetadataUpdate(_tokenId);
     ERC721._burn(_tokenId);
   }
 
