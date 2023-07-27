@@ -12,7 +12,7 @@ import "@openzeppelin/contracts/utils/Base64.sol";
 contract FreedomOfSpeech is CustomERC721URIStorage, ERC2981, Ownable{
   
   uint256 public tokensMinted; //tracks current tokenId
-  uint256 public totalSupply;
+  uint256 public totalActiveSupply;
 
   using Strings for uint256; //easily convert uint256 to string
 
@@ -22,11 +22,11 @@ contract FreedomOfSpeech is CustomERC721URIStorage, ERC2981, Ownable{
   event CreationFeeChange(uint256 _amount);
   event DislikeThresholdChange(uint256 _amount);
   event Withdraw(address indexed _address, uint256 _amount);
-  event TokenMinted(uint256 indexed _tokenId, address _minter);
-  event TokenLiked(uint256 indexed _tokenId, address _liker);
-  event TokenDisliked(uint256 indexed _tokenId, address _disliker);
-  event TokenClaimed(uint256 indexed _tokenId, address _claimer, uint256 _amount);
-  event TokenBurnedDown(uint256 indexed _tokenId, uint256 feesLost);
+  event TokenMinted(uint256 indexed _tokenId, address indexed _minter);
+  event TokenLiked(uint256 indexed _tokenId, address indexed _liker);
+  event TokenDisliked(uint256 indexed _tokenId, address indexed _disliker);
+  event TokenClaimed(uint256 indexed _tokenId, address indexed _claimer, uint256 _amount);
+  event TokenNullified(uint256 indexed _tokenId, uint256 feesLost);
 
   uint256 public totalUserMatic;
 
@@ -40,17 +40,19 @@ contract FreedomOfSpeech is CustomERC721URIStorage, ERC2981, Ownable{
   mapping(uint256 => Details) public tokenIdToDetails;
 
   mapping(address => mapping(uint256 => bool)) internal addressToReactionBool;
+  mapping(uint256 => bool) internal unlikeable;
 
   uint64 public creationFee;
   uint64 public likeFee;
   uint64 public dislikeFee;
   uint64 public dislikeThreshold;
 
-  bytes32 constant RESERVE_EXPRESSION = keccak256(abi.encodePacked("BURNED"));
+  bytes32 constant RESERVE_EXPRESSION_NULLIFIED = keccak256(abi.encodePacked("NULLIFIED"));
+  bytes32 constant RESERVE_EXPRESSION_CLAIMED = keccak256(abi.encodePacked("CLAIMED"));
   
   //set name and ticker of ERC721 contract and apply default royalty
   constructor() ERC721("Freedom of Speech", "FoS"){
-    _setDefaultRoyalty(msg.sender, 250);
+    _setDefaultRoyalty(msg.sender, 100);
     setCreationFee(500000000000000000); // 0.5 matic
     setLikeFee(100000000000000000); // 0.1 matic
     setDislikeFee(50000000000000000); // 0.05 matic
@@ -65,8 +67,12 @@ contract FreedomOfSpeech is CustomERC721URIStorage, ERC2981, Ownable{
   function mint(string memory _expression) external payable returns(uint256){
     require(msg.value >= creationFee, "Minimum fee not met!");
     require(bytes(_expression).length <= 64 , "Expression is too long");
-    require(keccak256(abi.encodePacked(_expression)) != RESERVE_EXPRESSION, "Expression denied");
-    totalSupply += 1;
+    require(
+      keccak256(abi.encodePacked(_expression)) != RESERVE_EXPRESSION_NULLIFIED &&
+      keccak256(abi.encodePacked(_expression)) != RESERVE_EXPRESSION_CLAIMED, 
+      "Expression denied"
+    );
+    totalActiveSupply += 1;
     tokensMinted += 1;
     uint256 newItemId = tokensMinted;
     tokenIdToDetails[newItemId] = Details(_expression, 0, 0, 0);
@@ -80,6 +86,7 @@ contract FreedomOfSpeech is CustomERC721URIStorage, ERC2981, Ownable{
   /// @notice Requires a small fee to like, which is routed to the current token holders reserve
   /// @param _tokenId The token Id issued upon minting the token
   function addLike(uint256 _tokenId) external payable {
+    require(!unlikeable[_tokenId], "Token has been nullified");
     require(addressToReactionBool[msg.sender][_tokenId] == false, "Can only react to a token once");
     addressToReactionBool[msg.sender][_tokenId] = true;
     uint256 _fee = msg.value;
@@ -94,21 +101,22 @@ contract FreedomOfSpeech is CustomERC721URIStorage, ERC2981, Ownable{
   /// @notice Allows user to dislike the expression posted on a token
   /// @notice Requires a small fee to dislike, which is routed to all other token holders' reserves
   /// @notice If the number of dislikes is over the threshold AND greater than 2 x the tokens likes,
-  ///         the token is burned and it's fee reserve is distributed to all other token holders' reserves
+  ///         the token is nullified and it's fee reserve is distributed to all other token holders' reserves
   /// @param _tokenId The token Id issued upon minting the token
   function addDislike(uint256 _tokenId) external payable {
+    require(!unlikeable[_tokenId], "Token has been nullified");
     require(addressToReactionBool[msg.sender][_tokenId] == false, "Can only react to a token once");
     addressToReactionBool[msg.sender][_tokenId] = true;
     uint256 _fee = msg.value;
     require(_fee >= dislikeFee, "Minimum fee not met!");
     totalUserMatic += _fee;
     tokenIdToDetails[_tokenId].dislikes += 1;
-    uint256 _tokensExisting = totalSupply;
+    uint256 _tokensExisting = totalActiveSupply;
     uint256 _tokensMinted = tokensMinted;
     uint256 _dislikes = tokenIdToDetails[_tokenId].dislikes;
     if(_dislikes >= dislikeThreshold && _dislikes >= (tokenIdToDetails[_tokenId].likes*2)){
       uint256 _feesAccruedForToken = tokenIdToDetails[_tokenId].feesAccrued;
-      _burn(_tokenId);
+      _nullify(_tokenId);
       for(uint i = 1; i <= _tokensMinted; i++){
         if(i != _tokenId){
           if(_exists(i)){
@@ -116,7 +124,7 @@ contract FreedomOfSpeech is CustomERC721URIStorage, ERC2981, Ownable{
           }
         }
       }
-      emit TokenBurnedDown(_tokenId, _feesAccruedForToken);
+      emit TokenNullified(_tokenId, _feesAccruedForToken);
          
     } else {
         for(uint i = 1; i <= _tokensMinted; i++){
@@ -137,11 +145,14 @@ contract FreedomOfSpeech is CustomERC721URIStorage, ERC2981, Ownable{
     address _sender = msg.sender;
     require(_sender == ownerOf(_tokenId), "Not Owner!");
     uint256 _funds = tokenIdToDetails[_tokenId].feesAccrued;
-    totalUserMatic -= _funds;
-    _burn(_tokenId);
+    tokenIdToDetails[_tokenId].feesAccrued = 0;
+    tokenIdToDetails[_tokenId].expression = "CLAIMED";
+    unlikeable[_tokenId] = true;
+    totalUserMatic -= _funds;    
     if(_funds > 0){
       payable(_sender).transfer(_funds);
     }
+    _setTokenURI(_tokenId, _generateTokenURI(_tokenId));
     emit TokenClaimed(_tokenId, _sender, _funds);
   }
   
@@ -230,20 +241,15 @@ contract FreedomOfSpeech is CustomERC721URIStorage, ERC2981, Ownable{
   //internal functions ----------------------------------------------------------------------------------------------------------------------
 
   /**
-   * @dev See {CustomERC721URIStorage-_burn}. This override additionally resets token royalty
-   * and details within contract storage.
+   * @dev Replaces tokens expression with "Nullified", makes the token unlikable, and removes token royalty
    */
-  function _burn(uint256 _tokenId) internal virtual override {
-    totalSupply -= 1;
+  function _nullify(uint256 _tokenId) internal virtual {
+    totalActiveSupply -= 1;
+    tokenIdToDetails[_tokenId].feesAccrued = 0;
+    tokenIdToDetails[_tokenId].expression = "NULLIFIED";
+    unlikeable[_tokenId] = true;
     _resetTokenRoyalty(_tokenId);
-    _resetTokenDetails(_tokenId);
     _setTokenURI(_tokenId, _generateTokenURI(_tokenId));
-    ERC721._burn(_tokenId);
-  }
-
-  /// @dev Resets tokenIdToDetails struct within contract
-  function _resetTokenDetails(uint256 _tokenId) internal {
-    tokenIdToDetails[_tokenId] = Details("BURNED", 0, 0, 0);
   }
 
   /// @dev Generates svg creation for storing dynamic token images on-chain
