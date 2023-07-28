@@ -46,6 +46,9 @@ contract FreedomOfSpeech is CustomERC721URIStorage, ERC2981, Ownable{
   uint64 public likeFee;
   uint64 public dislikeFee;
   uint64 public dislikeThreshold;
+  uint256 public maxLikes;
+  uint256 public maxDislikes;
+
 
   bytes32 constant RESERVE_EXPRESSION_NULLIFIED = keccak256(abi.encodePacked("NULLIFIED"));
   bytes32 constant RESERVE_EXPRESSION_CLAIMED = keccak256(abi.encodePacked("CLAIMED"));
@@ -94,6 +97,9 @@ contract FreedomOfSpeech is CustomERC721URIStorage, ERC2981, Ownable{
     totalUserMatic += _fee;
     tokenIdToDetails[_tokenId].likes += 1;
     tokenIdToDetails[_tokenId].feesAccrued += _fee;
+    if (tokenIdToDetails[_tokenId].likes > maxLikes) {
+      maxLikes = tokenIdToDetails[_tokenId].likes;
+    }
     _setTokenURI(_tokenId, _generateTokenURI(_tokenId));
     emit TokenLiked(_tokenId, msg.sender);
   }
@@ -111,6 +117,9 @@ contract FreedomOfSpeech is CustomERC721URIStorage, ERC2981, Ownable{
     require(_fee >= dislikeFee, "Minimum fee not met!");
     totalUserMatic += _fee;
     tokenIdToDetails[_tokenId].dislikes += 1;
+    if (tokenIdToDetails[_tokenId].dislikes > maxDislikes) {
+      maxDislikes = tokenIdToDetails[_tokenId].dislikes;
+    }
     uint256 _tokensExisting = totalActiveSupply;
     uint256 _tokensMinted = tokensMinted;
     uint256 _dislikes = tokenIdToDetails[_tokenId].dislikes;
@@ -286,7 +295,11 @@ contract FreedomOfSpeech is CustomERC721URIStorage, ERC2981, Ownable{
             '"external_url": " ",',
             '"description": "', _expression, '",',
             '"image_data": "', _generateImage(_tokenId, _expression, _likes, _dislikes), '",',
-            '"attributes": [{"trait_type": "likes", "value": ', _likes,'}, {"trait_type": "dislikes", "value": ', _dislikes,'}, {"trait_type": "fees accrued", "value": ', tokenIdToDetails[tokenId].feesAccrued.toString(),'}]'
+            '"attributes": [',
+                '{"trait_type": "likes", "value": ', _likes, ', "max_value": ', maxLikes.toString(), '}, ',
+                '{"trait_type": "dislikes", "value": ', _dislikes, ', "max_value": ', maxDislikes.toString(), '}, ',
+                '{"display_type": "number", "trait_type": "fees accrued", "value": ', tokenIdToDetails[tokenId].feesAccrued, '}'
+            ']'
         '}'
     );
     return string(
