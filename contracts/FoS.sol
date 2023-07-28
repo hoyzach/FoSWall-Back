@@ -40,7 +40,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   mapping(uint256 => Details) public tokenIdToDetails;
 
   mapping(address => mapping(uint256 => bool)) internal addressToReactionBool;
-  mapping(uint256 => bool) internal unlikeable;
+  mapping(uint256 => bool) internal inactive;
 
   uint64 public creationFee;
   uint64 public likeFee;
@@ -89,7 +89,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   /// @notice Requires a small fee to like, which is routed to the current token holders reserve
   /// @param _tokenId The token Id issued upon minting the token
   function addLike(uint256 _tokenId) external payable {
-    require(!unlikeable[_tokenId], "Token has been nullified");
+    require(!inactive[_tokenId], "Token has been nullified or claimed");
     require(addressToReactionBool[msg.sender][_tokenId] == false, "Can only react to a token once");
     addressToReactionBool[msg.sender][_tokenId] = true;
     uint256 _fee = msg.value;
@@ -110,38 +110,43 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   ///         the token is nullified and it's fee reserve is distributed to all other token holders' reserves
   /// @param _tokenId The token Id issued upon minting the token
   function addDislike(uint256 _tokenId) external payable {
-    require(!unlikeable[_tokenId], "Token has been nullified");
+    require(!inactive[_tokenId], "Token has been nullified or claimed");
     require(addressToReactionBool[msg.sender][_tokenId] == false, "Can only react to a token once");
     addressToReactionBool[msg.sender][_tokenId] = true;
     uint256 _fee = msg.value;
     require(_fee >= dislikeFee, "Minimum fee not met!");
-    totalUserMatic += _fee;
     tokenIdToDetails[_tokenId].dislikes += 1;
     if (tokenIdToDetails[_tokenId].dislikes > maxDislikes) {
       maxDislikes = tokenIdToDetails[_tokenId].dislikes;
     }
-    uint256 _tokensExisting = totalActiveSupply;
+    uint256 _tokensActive = totalActiveSupply;
     uint256 _tokensMinted = tokensMinted;
     uint256 _dislikes = tokenIdToDetails[_tokenId].dislikes;
     if(_dislikes >= dislikeThreshold && _dislikes >= (tokenIdToDetails[_tokenId].likes*2)){
       uint256 _feesAccruedForToken = tokenIdToDetails[_tokenId].feesAccrued;
       _nullify(_tokenId);
-      for(uint i = 1; i <= _tokensMinted; i++){
-        if(i != _tokenId){
-          if(_exists(i)){
-            tokenIdToDetails[i].feesAccrued += (_fee + _feesAccruedForToken) / (_tokensExisting - 1);
+      if(_tokensActive > 1){
+        for(uint i = 1; i <= _tokensMinted; i++){
+          if(i != _tokenId){
+            if(!inactive[i]){
+              tokenIdToDetails[i].feesAccrued += (_fee + _feesAccruedForToken) / (_tokensActive - 1);
+            }
           }
         }
+        totalUserMatic += _fee;
       }
       emit TokenNullified(_tokenId, _feesAccruedForToken);
          
     } else {
-        for(uint i = 1; i <= _tokensMinted; i++){
-          if(i != _tokenId){
-            if(_exists(i)){
-              tokenIdToDetails[i].feesAccrued += _fee / (_tokensExisting - 1);
+      if(_tokensActive > 1){
+          for(uint i = 1; i <= _tokensMinted; i++){
+            if(i != _tokenId){
+              if(!inactive[i]){
+                tokenIdToDetails[i].feesAccrued += _fee / (_tokensActive - 1);
+              }
             }
           }
+          totalUserMatic += _fee; 
         }
       _setTokenURI(_tokenId, _generateTokenURI(_tokenId));
     }
@@ -151,12 +156,13 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   /// @notice Allows owner of token to burn token
   /// @param _tokenId The token Id issued upon minting the token
   function claimToken(uint256 _tokenId) external {
+    require(!inactive[_tokenId], "Token has been nullified or claimed");
     address _sender = msg.sender;
     require(_sender == ownerOf(_tokenId), "Not Owner!");
     uint256 _funds = tokenIdToDetails[_tokenId].feesAccrued;
     tokenIdToDetails[_tokenId].feesAccrued = 0;
     tokenIdToDetails[_tokenId].expression = "CLAIMED";
-    unlikeable[_tokenId] = true;
+    inactive[_tokenId] = true;
     totalUserMatic -= _funds;    
     if(_funds > 0){
       payable(_sender).transfer(_funds);
@@ -250,13 +256,13 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   //internal functions ----------------------------------------------------------------------------------------------------------------------
 
   /**
-   * @dev Replaces tokens expression with "Nullified", makes the token unlikable, and removes token royalty
+   * @dev Replaces tokens expression with "Nullified", makes the token inactive, and removes token royalty
    */
   function _nullify(uint256 _tokenId) internal virtual {
     totalActiveSupply -= 1;
     tokenIdToDetails[_tokenId].feesAccrued = 0;
     tokenIdToDetails[_tokenId].expression = "NULLIFIED";
-    unlikeable[_tokenId] = true;
+    inactive[_tokenId] = true;
     _resetTokenRoyalty(_tokenId);
     _setTokenURI(_tokenId, _generateTokenURI(_tokenId));
   }
@@ -298,7 +304,6 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
             '"attributes": [',
                 '{"trait_type": "likes", "value": ', _likes, ', "max_value": ', maxLikes.toString(), '}, ',
                 '{"trait_type": "dislikes", "value": ', _dislikes, ', "max_value": ', maxDislikes.toString(), '}, ',
-                '{"display_type": "number", "trait_type": "fees accrued", "value": ', tokenIdToDetails[tokenId].feesAccrued.toString(), '}'
             ']'
         '}'
     );
