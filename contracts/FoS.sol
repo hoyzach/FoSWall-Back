@@ -2,14 +2,14 @@
 pragma solidity 0.8.17;
 
 import "@openzeppelin/contracts/token/common/ERC2981.sol";
-import "./CustomERC721URIStorage.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
 
 /// @title A contract that allows users to mint and own an NFT of their public statement and earn MATIC per like
 /// @notice The NFTs minted, and their metadata, are stored completely on the blockchain
 /// @custom:experimental This is an experimental contract.
-contract FreedomOfSpeech is CustomERC721URIStorage, ERC2981, Ownable{
+contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   
   uint256 public tokensMinted; //tracks current tokenId
   uint256 public totalActiveSupply;
@@ -204,7 +204,7 @@ contract FreedomOfSpeech is CustomERC721URIStorage, ERC2981, Ownable{
   }
 
   //ERC721URIStorage and ERC2981 both override supportsInterface - to fix this it's overwritten here as well
-  function supportsInterface(bytes4 _interfaceId) public view virtual override(CustomERC721URIStorage, ERC2981) returns (bool) {
+  function supportsInterface(bytes4 _interfaceId) public view virtual override(ERC721URIStorage, ERC2981) returns (bool) {
     return super.supportsInterface(_interfaceId);
   }
 
@@ -298,7 +298,7 @@ contract FreedomOfSpeech is CustomERC721URIStorage, ERC2981, Ownable{
             '"attributes": [',
                 '{"trait_type": "likes", "value": ', _likes, ', "max_value": ', maxLikes.toString(), '}, ',
                 '{"trait_type": "dislikes", "value": ', _dislikes, ', "max_value": ', maxDislikes.toString(), '}, ',
-                '{"display_type": "number", "trait_type": "fees accrued", "value": ', tokenIdToDetails[tokenId].feesAccrued, '}'
+                '{"display_type": "number", "trait_type": "fees accrued", "value": ', tokenIdToDetails[tokenId].feesAccrued.toString(), '}'
             ']'
         '}'
     );
