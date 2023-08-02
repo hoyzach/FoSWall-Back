@@ -303,7 +303,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
             '"image_data": "', _generateImage(_tokenId, _expression, _likes, _dislikes), '",',
             '"attributes": [',
                 '{"trait_type": "likes", "value": ', _likes, ', "max_value": ', maxLikes.toString(), '}, ',
-                '{"trait_type": "dislikes", "value": ', _dislikes, ', "max_value": ', maxDislikes.toString(), '}, ',
+                '{"trait_type": "dislikes", "value": ', _dislikes, ', "max_value": ', maxDislikes.toString(), '} ',
             ']'
         '}'
     );
