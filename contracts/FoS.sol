@@ -69,7 +69,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   /// @param _expression A user determined statement less than 64 bytes long (typically 64 characters)
   function mint(string memory _expression) external payable returns(uint256){
     require(msg.value >= creationFee, "Minimum fee not met!");
-    require(bytes(_expression).length <= 64 , "Expression is too long");
+    require(bytes(_expression).length <= 48 , "Expression is too long");
     require(
       keccak256(abi.encodePacked(_expression)) != RESERVE_EXPRESSION_NULLIFIED &&
       keccak256(abi.encodePacked(_expression)) != RESERVE_EXPRESSION_CLAIMED, 
