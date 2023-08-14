@@ -1,0 +1,9 @@
+Freedom of Speech NFT Disclaimer:
+
+By creating a Freedom of Speech Non-Fungible Token (NFT) through this platform, you ("the Creator") understand and accept the following:
+(1) You are the sole author of the expression minted on your NFT, or you have obtained all necessary rights, permissions, licenses, or clearances to lawfully use the expression.
+(2) The expression minted on your NFT does not infringe upon the copyright, trademark, patent, trade secret, or any other intellectual property rights of any third party.
+(3) The expression minted on your NFT does not expose, disseminate, or otherwise utilize sensitive information that does not legally belong to you or is not authorized for use by you.
+(4) The Creator shall be solely responsible for any and all claims, damages, liabilities, costs, and expenses (including but not limited to legal fees and expenses) arising out of or related to any breach of the above statements or any use of this smart contract that violates any law, rule, or regulation, or the rights of any third party.
+
+By engaging with this smart contract and creating an NFT, you affirm that your actions comply with all applicable laws and regulations, and you acknowledge that the contract owners shall not be liable for any unlawful or unauthorized activities.

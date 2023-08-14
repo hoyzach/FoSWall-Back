@@ -6,9 +6,28 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
 
-/// @title A contract that allows users to mint and own an NFT of their public statement and earn MATIC per like
+/// @title A contract that allows users to mint and own an NFT of their own expression and earn MATIC per like
 /// @notice The NFTs minted, and their metadata, are stored completely on the blockchain
 /// @custom:experimental This is an experimental contract.
+
+//---------------------------------------------------------------------------------------------------------------------------------------------------!
+// Freedom of Speech NFT Disclaimer:
+
+// By creating a Freedom of Speech Non-Fungible Token (NFT) through this platform, you ("the Creator") understand and accept the following:
+// (1) You are the sole author of the expression minted on your NFT, or you have obtained all necessary rights, permissions, licenses, or clearances 
+//      to lawfully use the expression.
+// (2) The expression minted on your NFT does not infringe upon the copyright, trademark, patent, trade secret, or any other intellectual property 
+//      rights of any third party.
+// (3) The expression minted on your NFT does not expose, disseminate, or otherwise utilize sensitive information that does not legally belong to 
+//      you or is not authorized for use by you.
+// (4) The Creator shall be solely responsible for any and all claims, damages, liabilities, costs, and expenses (including but not limited to legal 
+//      fees and expenses) arising out of or related to any breach of the above statements or any use of this smart contract that violates any law, 
+//      rule, or regulation, or the rights of any third party.
+
+// By engaging with this smart contract and creating an NFT, you affirm that your actions comply with all applicable laws and regulations, 
+// and you acknowledge that the contract owners shall not be liable for any unlawful or unauthorized activities.
+//---------------------------------------------------------------------------------------------------------------------------------------------------!
+
 contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   
   uint256 public tokensMinted; //tracks current tokenId
@@ -41,6 +60,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
 
   mapping(address => mapping(uint256 => bool)) internal addressToReactionBool;
   mapping(uint256 => bool) internal inactive;
+  mapping(address => bool) internal acceptedDisclaimer;
 
   uint64 public creationFee;
   uint64 public likeFee;
@@ -64,10 +84,17 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
 
   //interaction functions ---------------------------------------------------------------------------------------------------------------------
 
+  /// @notice Grants address ability to mint after accepting disclaimer
+  function acceptDisclaimer() external {
+    require(!acceptedDisclaimer[msg.sender], "Disclaimer already accepted");
+    acceptedDisclaimer[msg.sender] = true;
+  }
+  
   /// @notice Allows user to mint and hold a token of a given expression
   /// @notice Minting a token requires a creation fee plus gas
   /// @param _expression A user determined statement less than 64 bytes long (typically 64 characters)
   function mint(string memory _expression) external payable returns(uint256){
+    require(acceptedDisclaimer[msg.sender], "Disclaimer not accepted");
     require(msg.value >= creationFee, "Minimum fee not met!");
     require(bytes(_expression).length <= 48 , "Expression is too long");
     require(
@@ -162,8 +189,9 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     uint256 _funds = tokenIdToDetails[_tokenId].feesAccrued;
     tokenIdToDetails[_tokenId].feesAccrued = 0;
     tokenIdToDetails[_tokenId].expression = "CLAIMED";
+    totalActiveSupply -= 1;
     inactive[_tokenId] = true;
-    totalUserMatic -= _funds;    
+    totalUserMatic -= _funds;
     if(_funds > 0){
       payable(_sender).transfer(_funds);
     }
