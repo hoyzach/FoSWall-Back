@@ -13,18 +13,18 @@ import "@openzeppelin/contracts/utils/Base64.sol";
 //---------------------------------------------------------------------------------------------------------------------------------------------------!
 // Freedom of Speech NFT Disclaimer:
 
-// By creating a Freedom of Speech Non-Fungible Token (NFT) through this platform, you ("the Creator") understand and accept the following:
-// (1) You are the sole author of the expression minted on your NFT, or you have obtained all necessary rights, permissions, licenses, or clearances 
+// By minting a Freedom of Speech Non-Fungible Token (FoS Token) through this platform, you ("the Creator") understand and accept the following:
+// (1) You are the sole author of the expression minted on your FoS Token, or you have obtained all necessary rights, permissions, licenses, or clearances 
 //      to lawfully use the expression.
-// (2) The expression minted on your NFT does not infringe upon the copyright, trademark, patent, trade secret, or any other intellectual property 
+// (2) The expression minted on your FoS Token does not infringe upon the copyright, trademark, patent, trade secret, or any other intellectual property 
 //      rights of any third party.
-// (3) The expression minted on your NFT does not expose, disseminate, or otherwise utilize sensitive information that does not legally belong to 
+// (3) The expression minted on your FoS Token does not expose, disseminate, or otherwise utilize sensitive information that does not legally belong to 
 //      you or is not authorized for use by you.
 // (4) The Creator shall be solely responsible for any and all claims, damages, liabilities, costs, and expenses (including but not limited to legal 
 //      fees and expenses) arising out of or related to any breach of the above statements or any use of this smart contract that violates any law, 
 //      rule, or regulation, or the rights of any third party.
 
-// By engaging with this smart contract and creating an NFT, you affirm that your actions comply with all applicable laws and regulations, 
+// By engaging with this smart contract and minting an FoS Token, you affirm that your actions comply with all applicable laws and regulations, 
 // and you acknowledge that the contract owners shall not be liable for any unlawful or unauthorized activities.
 //---------------------------------------------------------------------------------------------------------------------------------------------------!
 
@@ -38,7 +38,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   event ReceivedMATIC(address indexed _address, uint256 _amount);
   event LikeFeeChange(uint256 _amount);
   event DislikeFeeChange(uint256 _amount);
-  event CreationFeeChange(uint256 _amount);
+  event MintFeeChange(uint256 _amount);
   event DislikeThresholdChange(uint256 _amount);
   event Withdraw(address indexed _address, uint256 _amount);
   event TokenMinted(uint256 indexed _tokenId, address indexed _minter);
@@ -62,13 +62,12 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   mapping(uint256 => bool) internal inactive;
   mapping(address => bool) internal acceptedDisclaimer;
 
-  uint64 public creationFee;
+  uint64 public mintFee;
   uint64 public likeFee;
   uint64 public dislikeFee;
   uint64 public dislikeThreshold;
   uint256 public maxLikes;
   uint256 public maxDislikes;
-
 
   bytes32 constant RESERVE_EXPRESSION_NULLIFIED = keccak256(abi.encodePacked("NULLIFIED"));
   bytes32 constant RESERVE_EXPRESSION_CLAIMED = keccak256(abi.encodePacked("CLAIMED"));
@@ -76,7 +75,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   //set name and ticker of ERC721 contract and apply default royalty
   constructor() ERC721("Freedom of Speech", "FoS"){
     _setDefaultRoyalty(msg.sender, 100);
-    setCreationFee(500000000000000000); // 0.5 matic
+    setMintFee(500000000000000000); // 0.5 matic
     setLikeFee(100000000000000000); // 0.1 matic
     setDislikeFee(50000000000000000); // 0.05 matic
     setDislikeThreshold(2);
@@ -91,11 +90,12 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   }
   
   /// @notice Allows user to mint and hold a token of a given expression
-  /// @notice Minting a token requires a creation fee plus gas
+  /// @notice Minting a token requires a mint fee plus gas
   /// @param _expression A user determined statement less than 64 bytes long (typically 64 characters)
   function mint(string memory _expression) external payable returns(uint256){
     require(acceptedDisclaimer[msg.sender], "Disclaimer not accepted");
-    require(msg.value >= creationFee, "Minimum fee not met!");
+    require(msg.value >= mintFee, "Minimum fee not met!");
+    require(bytes(_expression).length > 0 && !isOnlyWhitespace(_expression), "Expression cannot be null or only whitespace");
     require(bytes(_expression).length <= 48 , "Expression is too long");
     require(
       keccak256(abi.encodePacked(_expression)) != RESERVE_EXPRESSION_NULLIFIED &&
@@ -149,16 +149,21 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     uint256 _tokensActive = totalActiveSupply;
     uint256 _tokensMinted = tokensMinted;
     uint256 _dislikes = tokenIdToDetails[_tokenId].dislikes;
-    if(_dislikes >= dislikeThreshold && _dislikes >= (tokenIdToDetails[_tokenId].likes*2)){
+    if(_dislikes >= dislikeThreshold && _dislikes > (tokenIdToDetails[_tokenId].likes*2)){
       uint256 _feesAccruedForToken = tokenIdToDetails[_tokenId].feesAccrued;
       _nullify(_tokenId);
-      if(_tokensActive > 1){
-        for(uint i = 1; i <= _tokensMinted; i++){
-          if(i != _tokenId){
-            if(!inactive[i]){
-              tokenIdToDetails[i].feesAccrued += (_fee + _feesAccruedForToken) / (_tokensActive - 1);
+      if(_tokensActive > 1) {
+        uint256 totalFee = _fee + _feesAccruedForToken;
+        uint256 distributedFee = 0;        
+        for(uint i = 1; i <= _tokensMinted; i++) {
+            if(i != _tokenId && !inactive[i]) {
+                uint256 individualFee = totalFee / (_tokensActive - 1);
+                if (distributedFee + individualFee > totalFee) {
+                    individualFee = totalFee - distributedFee;
+                }
+                tokenIdToDetails[i].feesAccrued += individualFee;
+                distributedFee += individualFee;
             }
-          }
         }
         totalUserMatic += _fee;
       }
@@ -166,15 +171,19 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
          
     } else {
       if(_tokensActive > 1){
-          for(uint i = 1; i <= _tokensMinted; i++){
-            if(i != _tokenId){
-              if(!inactive[i]){
-                tokenIdToDetails[i].feesAccrued += _fee / (_tokensActive - 1);
-              }
+        uint256 distributedFee = 0;  
+        for(uint i = 1; i <= _tokensMinted; i++){
+            if(i != _tokenId && !inactive[i]) {
+                uint256 individualFee = _fee / (_tokensActive - 1);
+                if (distributedFee + individualFee > _fee) {
+                    individualFee = _fee - distributedFee;
+                }
+                tokenIdToDetails[i].feesAccrued += individualFee;
+                distributedFee += individualFee;
             }
-          }
-          totalUserMatic += _fee; 
         }
+        totalUserMatic += _fee; 
+      }
       _setTokenURI(_tokenId, _generateTokenURI(_tokenId));
     }
     emit TokenDisliked(_tokenId, msg.sender);
@@ -244,11 +253,11 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
 
   //owner functions -------------------------------------------------------------------------------------------------------------------------
 
-  /// @notice onlyOwner - Allows owner of contract to change token creation fee
+  /// @notice onlyOwner - Allows owner of contract to change token mint fee
   /// @param _fee An owner determined fee in wei
-  function setCreationFee(uint64 _fee) public onlyOwner {
-    creationFee = _fee;
-    emit CreationFeeChange(_fee);
+  function setMintFee(uint64 _fee) public onlyOwner {
+    mintFee = _fee;
+    emit MintFeeChange(_fee);
   }
 
   /// @notice onlyOwner - Allows owner of contract to change token like fee
@@ -272,7 +281,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     emit DislikeThresholdChange(_dislikes);
   }
 
-  /// @notice onlyOwner - Allows owner of contract to withdraw donations and creation fees
+  /// @notice onlyOwner - Allows owner of contract to withdraw donations and mint fees
   function withdraw(uint256 _amount, address _address) external onlyOwner {
     require(_address != address(0), "Invalid address");
     require(_amount != 0, "Amount cannot be 0");
@@ -283,9 +292,18 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
 
   //internal functions ----------------------------------------------------------------------------------------------------------------------
 
-  /**
-   * @dev Replaces tokens expression with "Nullified", makes the token inactive, and removes token royalty
-   */
+  /// @dev Check if given expression entered is only whitespace
+  function isOnlyWhitespace(string memory str) internal pure returns (bool) {
+      bytes memory b = bytes(str);
+      for (uint i; i < b.length; i++) {
+          if (b[i] != 0x20 && b[i] != 0x09 && b[i] != 0x0A && b[i] != 0x0D) {
+              return false;
+          }
+      }
+      return true;
+  }
+
+  /// @dev Replaces tokens expression with "Nullified", makes the token inactive, and removes token royalty
   function _nullify(uint256 _tokenId) internal virtual {
     totalActiveSupply -= 1;
     tokenIdToDetails[_tokenId].feesAccrued = 0;
