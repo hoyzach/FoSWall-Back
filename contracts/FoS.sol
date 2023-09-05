@@ -41,6 +41,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   event MintFeeChange(uint256 _amount);
   event DislikeThresholdChange(uint256 _amount);
   event Withdraw(address indexed _address, uint256 _amount);
+  event AcceptedDisclaimer(address indexed _accepter);
   event TokenMinted(uint256 indexed _tokenId, address indexed _minter);
   event TokenLiked(uint256 indexed _tokenId, address indexed _liker);
   event TokenDisliked(uint256 indexed _tokenId, address indexed _disliker);
@@ -85,8 +86,10 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
 
   /// @notice Grants address ability to mint after accepting disclaimer
   function acceptDisclaimer() external {
-    require(!acceptedDisclaimer[msg.sender], "Disclaimer already accepted");
-    acceptedDisclaimer[msg.sender] = true;
+    address _accepter = msg.sender;
+    require(!acceptedDisclaimer[_accepter], "Disclaimer already accepted");
+    acceptedDisclaimer[_accepter] = true;
+    emit AcceptedDisclaimer(_accepter);
   }
   
   /// @notice Allows user to mint and hold a token of a given expression
@@ -96,7 +99,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
     require(acceptedDisclaimer[msg.sender], "Disclaimer not accepted");
     require(msg.value >= mintFee, "Minimum fee not met!");
     require(bytes(_expression).length > 0 && !isOnlyWhitespace(_expression), "Expression cannot be null or only whitespace");
-    require(bytes(_expression).length <= 48 , "Expression is too long");
+    require(bytes(_expression).length <= 56 , "Expression is too long");
     require(
       keccak256(abi.encodePacked(_expression)) != RESERVE_EXPRESSION_NULLIFIED &&
       keccak256(abi.encodePacked(_expression)) != RESERVE_EXPRESSION_CLAIMED, 
@@ -165,7 +168,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
                 distributedFee += individualFee;
             }
         }
-        totalUserMatic += _fee;
+        totalUserMatic += distributedFee - _feesAccruedForToken;
       }
       emit TokenNullified(_tokenId, _feesAccruedForToken);
          
@@ -182,7 +185,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
                 distributedFee += individualFee;
             }
         }
-        totalUserMatic += _fee; 
+        totalUserMatic += distributedFee; 
       }
       _setTokenURI(_tokenId, _generateTokenURI(_tokenId));
     }
@@ -233,6 +236,7 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   /// @return Total fees accrued for a specified token
   function getfeesAccrued(uint256 _tokenId) public view returns (uint256) {
     require(_exists(_tokenId), "Token does not exist!");
+    require(!inactive[_tokenId], "Token inactive!");
     uint256 fees = tokenIdToDetails[_tokenId].feesAccrued;
     return fees;
   }

@@ -4,6 +4,7 @@ yark.lock
 node_modules/
 .env
 notes.txt
+info.txt
 coverage
 coverage.json
 typechain
