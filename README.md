@@ -47,7 +47,3 @@ The fees accrued for an FoS Token can be lost if its number of dislikes exceeds 
 ## Inactive Token
 
 When an FoS Token is claimed or nullified, it becomes inactive, and its expression is altered permanently, while all other aspects of the token remain unchanged.  Inactive tokens lose the ability to be further liked, disliked, claimed, or nullified.  Inactive FoS Tokens are not burned and can still be transferred to different wallet addresses.
-
-
-
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app) and deployed on Vercel.
