@@ -76,9 +76,9 @@ contract FreedomOfSpeech is ERC721URIStorage, ERC2981, Ownable{
   //set name and ticker of ERC721 contract and apply default royalty
   constructor() ERC721("Freedom of Speech", "FoS"){
     _setDefaultRoyalty(msg.sender, 100);
-    setMintFee(500000000000000000); // 0.5 matic
-    setLikeFee(100000000000000000); // 0.1 matic
-    setDislikeFee(50000000000000000); // 0.05 matic
+    setMintFee(50000000000000000); // 0.05 matic
+    setLikeFee(10000000000000000); // 0.01 matic
+    setDislikeFee(5000000000000000); // 0.005 matic
     setDislikeThreshold(2);
   }
 
